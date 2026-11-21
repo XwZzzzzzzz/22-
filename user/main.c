@@ -20,8 +20,8 @@
 | | |  \\     /| | |  |
 | |_|   `-`-'   | |_| |
 |  | `-\/`-----'/` |  |
-\\  \ `-.____.-`/  //
- `__`. `--`--' .'__`
+ \\  \ `-.____.-`/  //
+  `__`. `--`--' .'__`
    `---`-_____-`---`
 佛祖保佑    永无BUG
 */
@@ -135,7 +135,7 @@ void main(void)
     pit_ms_init(PIT_CH  ,   5   ,   pit_handler);                      // 速度环中断
     while(1)
     {
-        int r;
+        int r;int c;
         if(use_wifi_spi ==1 || use_wifi_uart == 1)
         {
             if(tiaocan_flag)
