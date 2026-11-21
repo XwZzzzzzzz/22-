@@ -1,0 +1,28 @@
+{
+    // 编码：打开文件时自动猜测
+    // "files.encoding": "utf8",
+    "files.autoGuessEncoding": true,
+    "files.candidateGuessEncodings": [
+        "utf8",
+        "gb2312"
+    ],
+
+    // 输入时自动弹出代码提示
+    "editor.quickSuggestions": {
+        "other": true,
+        "comments": true,
+        "strings": true
+    },
+    "editor.suggestOnTriggerCharacters": true,
+    "editor.quickSuggestionsDelay": 0,
+    "editor.parameterHints.enabled": true,
+    "editor.suggestSelection": "first",
+    "editor.wordBasedSuggestions": "matchingDocuments",
+
+    // C/C++ IntelliSense
+    "C_Cpp.intelliSenseEngine": "default",
+    "C_Cpp.errorSquiggles": "enabled",
+
+    // 不要自动格式化 C251 代码
+    "editor.formatOnSave": false
+}

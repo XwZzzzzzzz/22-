@@ -1,0 +1,83 @@
+#include "encoder.h"
+
+static int32_t right_total_count;
+static int32_t left_total_count;
+static uint16_t right_last_count;
+static uint16_t left_last_count;
+
+int32_t g_encoder_pps;
+float g_encoder_rpm;
+int32_t g_encoder_pps_right;
+int32_t g_encoder_pps_left;
+float g_encoder_rpm_right;
+float g_encoder_rpm_left;
+float difspeed;
+
+
+
+void Encoder_InitRight(void) { Encoder_Init(); }
+void Encoder_InitLeft(void) { Encoder_Init(); }
+
+void Encoder_Update(uint16_t period_ms)
+{
+    uint16_t right_count;
+    uint16_t left_count;
+    int16_t right_delta;
+    int16_t left_delta;
+    float pulses_per_output_rev;
+
+    right_count = TIM_GetCounter(TIM2);
+    left_count = TIM_GetCounter(TIM4);
+    right_delta = (int16_t)(right_count - right_last_count);
+    left_delta = (int16_t)(left_count - left_last_count);
+    right_last_count = right_count;
+    left_last_count = left_count;
+    right_delta = (int16_t)(right_delta * ENCODER_RIGHT_DIRECTION);
+    left_delta = (int16_t)(left_delta * ENCODER_LEFT_DIRECTION);
+    right_total_count += right_delta;
+    left_total_count += left_delta;
+
+    if (period_ms == 0)
+    {
+        g_encoder_pps_right = 0;
+        g_encoder_pps_left = 0;
+    }
+    else
+    {
+        g_encoder_pps_right = (int32_t)((float)right_delta * 1000.0f / period_ms);
+        g_encoder_pps_left = (int32_t)((float)left_delta * 1000.0f / period_ms);
+    }
+    pulses_per_output_rev = (float)ENCODER_PPR * 4.0f * ENCODER_GEAR_RATIO;
+    if (pulses_per_output_rev > 0.0f)
+    {
+        g_encoder_rpm_right = g_encoder_pps_right * 60.0f / pulses_per_output_rev;
+        g_encoder_rpm_left = g_encoder_pps_left * 60.0f / pulses_per_output_rev;
+    }
+    else
+    {
+        g_encoder_rpm_right = 0.0f;
+        g_encoder_rpm_left = 0.0f;
+    }
+    g_encoder_pps = (g_encoder_pps_right + g_encoder_pps_left) / 2;
+    g_encoder_rpm = (g_encoder_rpm_right + g_encoder_rpm_left) * 0.5f;
+    difspeed = (g_encoder_rpm_right - g_encoder_rpm_left)/60.0f;
+}
+
+void Encoder_UpdateRight(uint16_t period_ms) { (void)period_ms; }
+void Encoder_UpdateLeft(uint16_t period_ms) { Encoder_Update(period_ms); }
+
+int32_t Encoder_GetTotalCount(void) { return right_total_count; }
+int32_t Encoder_GetTotalCount_Right(void) { return right_total_count; }
+int32_t Encoder_GetRightTotalCount(void) { return right_total_count; }
+int32_t Encoder_GetLeftTotalCount(void) { return left_total_count; }
+int32_t Encoder_GetAverageTotalCount(void) { return (right_total_count + left_total_count) / 2; }
+
+void Encoder_ResetTotalCount(void)
+{
+    right_last_count = TIM_GetCounter(TIM2);
+    left_last_count = TIM_GetCounter(TIM4);
+    right_total_count = 0;
+    left_total_count = 0;
+}
+
+void Encoder_ResetTotalCount_Right(void) { Encoder_ResetTotalCount(); }

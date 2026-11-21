@@ -1,0 +1,1384 @@
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE vision
+OBJECT MODULE PLACED IN .\out_file\vision.obj
+COMPILER INVOKED BY: D:\Keil_v5\C251\BIN\C251.EXE ..\user\vision.c LARGE ROM(HUGE) WARNINGLEVEL(3) OPTIMIZE(0,SIZE) BROW
+                    -SE INCDIR(..\libraries\zf_common;..\libraries\zf_components;..\libraries\zf_device;..\libraries\zf_driver;..\user;..\cod
+                    -e;..\libraries\zf_components\stc32g_usb_lib;..\libraries\zf_components\seekfree_assistant) DEBUG PRINT(.\out_file\vision
+                    -.lst) TABS(2) OBJECT(.\out_file\vision.obj) 
+
+stmt  level    source
+
+    1          #include "zf_common_headfile.h"
+    2          #include "vision.h"
+    3          #include "stc.h"
+    4          
+    5          typedef  point  inflection_point;
+    6          point L_edge[120];         
+    7          point R_edge[120];        
+    8          f_point middle_line[120]; 
+    9          int middle_col = 94;       
+   10          // uint8 image_buffer[120][180];
+   11          // uint16 L_lost_time;
+   12          // uint16 R_lost_time;
+   13          // uint16 zong_lost_time;
+   14          uint8 shizi_flag;
+   15          int angle_row=65;
+   16          uint8 cbhyuzhi=6;
+   17          uint8 cbhyuzhi_zcbl=20;
+   18          //***************************************
+   19          uint8 cbh_mindiff=10;//需要调整 
+   20          uint8 sum_th=40;
+   21          //***************************************
+   22          
+   23          
+   24          uint8 find_zuoshang_point(void)
+   25          {       
+   26   1          int zuoshang_row ;
+   27   1          uint8 zuoshang_line = 0 ;
+   28   1          // if(zong_lost_time>= (120-zhongzhihang)* 0.9 )return 0;//如果实际扫行数太多都丢线了 �
+             -�接没有
+   29   1          for(zuoshang_row= start_row-5 ;zuoshang_row>=end_row+5;zuoshang_row--)
+   30   1          {   
+   31   2              if
+   32   2              (abs(L_edge[zuoshang_row].col  -   L_edge[zuoshang_row-1].col)   <=  lianxu_flag   && 
+   33   2              abs(L_edge[zuoshang_row-1].col -   L_edge[zuoshang_row-2].col)   <=  lianxu_flag   &&
+   34   2              abs(L_edge[zuoshang_row-2].col -   L_edge[zuoshang_row-3].col)   <=  lianxu_flag   &&
+   35   2              L_edge[zuoshang_row].col - L_edge[zuoshang_row + 1 ].col         >=  tiaoyue_flag    &&
+   36   2              L_edge[zuoshang_row].col - L_edge[zuoshang_row + 2 ].col         >=  tiaoyue_flag   &&
+   37   2              L_edge[zuoshang_row].col - L_edge[zuoshang_row + 3 ].col         >=  tiaoyue_flag
+   38   2              )   
+   39   2              {
+   40   3                  zuoshang_line = zuoshang_row;
+   41   3                  return zuoshang_row;
+   42   3              }
+   43   2          }
+   44   1          return 0;
+   45   1      }
+   46          uint8 find_zuoxia_point(void)
+   47          {       
+   48   1          int zuoxia_row ;
+   49   1          uint8 zuoxia_line = 0 ;
+   50   1          // if(zong_lost_time>=0.9*(120-zhongzhihang))return 0;//如果实际扫行数太多都丢线了 直�
+             -�没有
+   51   1          for(zuoxia_row= start_row-5 ;zuoxia_row>=end_row+5;zuoxia_row--)
+   52   1          {   
+   53   2              if
+   54   2              (abs(L_edge[zuoxia_row].col  -   L_edge[zuoxia_row+1].col)   <=   lianxu_flag  && 
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 2   
+
+   55   2              abs(L_edge[zuoxia_row+1].col -   L_edge[zuoxia_row+2].col)   <=   lianxu_flag  &&
+   56   2              abs(L_edge[zuoxia_row+2].col -   L_edge[zuoxia_row+3].col)   <=   lianxu_flag  &&
+   57   2              L_edge[zuoxia_row].col - L_edge[zuoxia_row - 1 ].col         >=   tiaoyue_flag &&
+   58   2              L_edge[zuoxia_row].col - L_edge[zuoxia_row - 2 ].col         >=   tiaoyue_flag &&
+   59   2              L_edge[zuoxia_row].col - L_edge[zuoxia_row - 3 ].col         >=   tiaoyue_flag
+   60   2              )   
+   61   2              {
+   62   3                  zuoxia_line = zuoxia_row;
+   63   3                  return zuoxia_row;
+   64   3              }
+   65   2          }
+   66   1          return 0;
+   67   1      }
+   68          
+   69          uint8 find_youxia_point()
+   70          {       
+   71   1          int youxia_row ;
+   72   1          uint8 youxia_line = 0 ;
+   73   1      
+   74   1          // if(zong_lost_time>=0.9*(120-zhongzhihang))return 0;//如果实际扫行数太多都丢线了 直�
+             -�没有
+   75   1          for(youxia_row= start_row-5 ;youxia_row>=end_row+5;youxia_row--)
+   76   1          {   
+   77   2              if
+   78   2              (abs(R_edge[youxia_row].col  -   R_edge[youxia_row+1].col)   <=  lianxu_flag  && 
+   79   2              abs(R_edge[youxia_row+1].col -   R_edge[youxia_row+2].col)   <=  lianxu_flag  &&
+   80   2              abs(R_edge[youxia_row+2].col -   R_edge[youxia_row+3].col)   <=  lianxu_flag  &&
+   81   2              -R_edge[youxia_row].col + R_edge[youxia_row - 1 ].col        >=  tiaoyue_flag &&
+   82   2              -R_edge[youxia_row].col + R_edge[youxia_row - 2 ].col        >=  tiaoyue_flag &&
+   83   2              -R_edge[youxia_row].col + R_edge[youxia_row - 3 ].col        >= tiaoyue_flag
+   84   2              )   
+   85   2              {
+   86   3                  return youxia_row;
+   87   3              }
+   88   2          }
+   89   1          return 0;
+   90   1      }
+   91          uint8 find_youshang_point(void)
+   92          {       
+   93   1          int zuoshang_row ;
+   94   1          uint8 zuoshang_line = 0 ;
+   95   1      
+   96   1          // if(zong_lost_time>=0.9*(120-zhongzhihang))return 0;//如果实际扫行数太多都丢线了 直�
+             -�没有
+   97   1          for(zuoshang_row= start_row-5 ;zuoshang_row>=end_row+5;zuoshang_row--)
+   98   1          {   
+   99   2              if(
+  100   2              abs(R_edge[zuoshang_row].col   -   R_edge[zuoshang_row-1].col)   <=  lianxu_flag   && 
+  101   2              abs(R_edge[zuoshang_row-1].col -   R_edge[zuoshang_row-2].col)   <=  lianxu_flag   &&
+  102   2              abs(R_edge[zuoshang_row-2].col -   R_edge[zuoshang_row-3].col)   <=  lianxu_flag   &&
+  103   2                  -R_edge[zuoshang_row].col + R_edge[zuoshang_row + 1 ].col    >=  tiaoyue_flag  &&
+  104   2                  -R_edge[zuoshang_row].col + R_edge[zuoshang_row + 2 ].col    >=  tiaoyue_flag  &&
+  105   2                  -R_edge[zuoshang_row].col + R_edge[zuoshang_row + 3 ].col    >=  tiaoyue_flag
+  106   2              )   
+  107   2              {
+  108   3                  return zuoshang_row;
+  109   3              }
+  110   2          }
+  111   1          return 0;
+  112   1      }
+  113          
+  114          int8 find_shizi(void)
+  115          {
+  116   1          int8 cnt=0;
+  117   1          int i;
+  118   1          for( i = start_row;i>=end_row;i-=2)
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 3   
+
+  119   1          {
+  120   2              if( L_edge[i].flag==lost && R_edge[i].flag==lost)//两边都扫过且都没找到，才算丢线�
+             -��wait 不算
+  121   2              {
+  122   3                  cnt++;            
+  123   3              }
+  124   2              else cnt=0 ;
+  125   2              if(cnt>=5)
+  126   2              {
+  127   3                  return 1;
+  128   3              }
+  129   2          }   
+  130   1          return 0;   
+  131   1      }
+  132          inflection_point L_inflection_point;
+  133          inflection_point R_inflection_point;
+  134          
+  135          
+  136          void     track_scan_cbh     (void)
+  137          {
+  138   1          int16 zhongxian = middle_col;
+  139   1          int16 col_r, col_l,row;
+  140   1          uint8 track_end_row;
+  141   1          // int16 l,r ; //丢线逻辑，暂且封印
+  142   1          //描角行
+  143   1          // for(saojiaohang=50;saojiaohang<=90;saojiaohang++)tft180_draw_point(saojiaohang * 3 / 4,jiaohang_ro
+             -w * 3 / 4 ,RGB565_BROWN);//描出角行便于调试
+  144   1          
+  145   1          if(middle_end_row<end_row)track_end_row=end_row;
+  146   1          if(middle_end_row>end_row)track_end_row=middle_end_row;
+  147   1          for(row = start_row; row >=track_end_row; row--)
+  148   1          {
+  149   2          //    if(zhongxian<1)zhongxian=1;
+  150   2          //    else if(zhongxian > 186)zhongxian=186;
+  151   2              if(middle_col<eight_left_edge)middle_col=eight_left_edge;
+  152   2              else if(middle_col > eight_right_edge)middle_col=eight_right_edge;
+  153   2              for(col_r=middle_col;col_r<=eight_right_edge;col_r++)
+  154   2              {
+  155   3                      if(cbh(mt9v03x_image[row][col_r+1],mt9v03x_image[row][col_r]) && mt9v03x_image[row][col_r
+             -]>mt9v03x_image[row][col_r+1] )//找白黑跳变
+  156   3                      {
+  157   4                          // tft180_draw_point(col_r  *3/4, row *3/4, RGB565_BLUE);
+  158   4                          R_edge[row].col=col_r;
+  159   4                          R_edge[row].row=row;
+  160   4                          R_edge[row].flag=hit;
+  161   4                          if(col_r<R_inflection_point.col)
+  162   4                          {
+  163   5                              R_inflection_point.col=col_r;
+  164   5                              R_inflection_point.row=row;
+  165   5                          }
+  166   4                          break;
+  167   4                      }
+  168   3                      if(col_r==eight_right_edge)
+  169   3                      {
+  170   4                          R_edge[row].flag=lost;//丢线
+  171   4                          R_edge[row].col=col_r;
+  172   4                      }
+  173   3              }
+  174   2              for(col_l=middle_col;col_l>=eight_left_edge;col_l--)
+  175   2              {
+  176   3                      if(cbh(mt9v03x_image[row][col_l-1],mt9v03x_image[row][col_l]) && mt9v03x_image[row][col_l
+             --1]<mt9v03x_image[row][col_l])//找黑白跳变
+  177   3                      {
+  178   4                          L_edge[row].col=col_l;
+  179   4                          L_edge[row].row=row;
+  180   4                          L_edge[row].flag=hit;
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 4   
+
+  181   4                          if(col_r>L_inflection_point.col)
+  182   4                          {
+  183   5                              L_inflection_point.col=col_r;
+  184   5                              L_inflection_point.row=row;
+  185   5                          }
+  186   4                          break;
+  187   4                      }
+  188   3                      if(col_l==eight_left_edge)
+  189   3                      {
+  190   4                          L_edge[row].flag=lost;
+  191   4                          L_edge[row].col=col_l;
+  192   4                      }
+  193   3                      
+  194   3              }
+  195   2      
+  196   2              // zhongxian=(L_edge[row].col+R_edge[row].col)/2;
+  197   2              // middle_line[row].col = zhongxian;
+  198   2              // tft180_draw_point(zhongxian *3/4,row *3/4,RGB565_GRAY);
+  199   2          }
+  200   1      }
+  201          int middle_end_row=0;
+  202          void find_edge(void)
+  203          {   
+  204   1          int c=0;int r=0 ;
+  205   1          int chang=0,zuichang=0,zcbl_col1=0;
+  206   1          memset(L_edge,0,sizeof(L_edge));
+  207   1          memset(R_edge,0,sizeof(R_edge));
+  208   1          memset(middle_line,0,sizeof(middle_line));
+  209   1          memset(&R_inflection_point,0,sizeof(R_inflection_point));
+  210   1          memset(&L_inflection_point,0,sizeof(L_inflection_point));
+  211   1          //最长白列
+  212   1           for( c =eight_left_edge; c<=eight_right_edge;c+=5)  
+  213   1          {
+  214   2              chang=0;//mt903x_image[row(110)][col];
+  215   2              for( r=start_row;r>=end_row;r--)
+  216   2              {            
+  217   3                  if(mt9v03x_image[r][c]>90)
+  218   3                  // if(mt9v03x_image[r][c]<90)continue;
+  219   3                  // if(cbh(mt9v03x_image[r][c],mt9v03x_image[r-1][c]) && mt9v03x_image[r-1][c]<mt9v03x_image[r
+             -][c])
+  220   3                  {
+  221   4                      chang++;
+  222   4                  }
+  223   3                  else break;
+  224   3              }
+  225   2              if(zuichang<chang)
+  226   2              { 
+  227   3                  zuichang=chang;//赋值
+  228   3                  zcbl_col1 = c;
+  229   3                  middle_end_row=r;
+  230   3              }
+  231   2          }
+  232   1          middle_col = zcbl_col1;
+  233   1          track_scan_cbh();
+  234   1      }
+  235          
+  236          
+  237          // void     track_scan_cbh_tiaoyue     (void)
+  238          // {
+  239          //     int16 zhongxian = 94;
+  240          //     int16 col_r, col_l,row;
+  241          //     int16 jiaohang_row=qujiaohang*2;
+  242          //     uint8 saojiaohang;
+  243          //     L_lost_time=0,R_lost_time=0,zong_lost_time=0;
+  244          //     // int16 l,r ; //丢线逻辑，暂且封印
+  245          //     //描角行
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 5   
+
+  246          //     // for(saojiaohang=50;saojiaohang<=90;saojiaohang++)tft180_draw_point(saojiaohang * 3 / 4,jiaohang
+             -_row * 3 / 4 ,RGB565_BROWN);//描出角行便于调试
+  247          //     for(row = qisaohang; row >=2; row-=2)//118 ~ 0
+  248          //     {
+  249          //        if(zhongxian<1)zhongxian=1;
+  250          //        else if(zhongxian > 186)zhongxian=186;
+  251          
+  252          //        for(col_r=zhongxian;col_r<=186;col_r++)
+  253          //        {
+  254          
+  255          //             if(cbh(mt9v03x_image[row][col_r+1],mt9v03x_image[row][col_r]) > cbhyuzhi )
+  256          //             {
+  257          //                 // tft180_draw_point(col_r  *3/4, row *3/4, RGB565_BLUE);
+  258          //                 youxian_pos[row/2]=col_r;
+  259          //                 R_flag[row/2]=1;
+  260          //                 break;
+  261          //             }
+  262          //             else 
+  263          //             {
+  264          
+  265          //                 R_flag[row/2]=0;
+  266          //                 youxian_pos[row/2]=col_r;
+  267          //             }
+  268          //        }
+  269          //        for(col_l=zhongxian;col_l>0;col_l--)
+  270          //        {
+  271          //             if(cbh(mt9v03x_image[row][col_l-1],mt9v03x_image[row][col_l]) > cbhyuzhi)
+  272          //             {
+  273          //                 // tft180_draw_point(col_l *3/4, row *3/4, RGB565_RED);
+  274          //                 zuoxian_pos[row/2]=col_l;
+  275          //                 L_flag[row/2]=1;
+  276          //                 break;
+  277          //             }
+  278          //             else 
+  279          //             {   
+  280                      
+  281          //                 L_flag[row/2]=0;
+  282          //                 zuoxian_pos[row/2]=col_l;
+  283          //             }
+  284                      
+  285          //         }
+  286                  
+  287          //         if(R_flag[row/2]==0)R_lost_time++;
+  288          //         if(L_flag[row/2]==0)L_lost_time++;
+  289          
+  290          //         zhongxian=(col_l+col_r)/2;
+  291          //         zhongxian_pos[row/2] = zhongxian;
+  292          //         // tft180_draw_point(zhongxian *3/4,row *3/4,RGB565_GRAY);
+  293          //     }
+  294          //     if(L_lost_time>R_lost_time)zong_lost_time=L_lost_time;
+  295          //     else zong_lost_time = R_lost_time;//计算丢线次数
+  296          //     zong_lost_time*=2;
+  297          // }
+  298          
+  299          
+  300          
+  301          
+  302          
+  303          
+  304          uint8 cbh(uint8 x, uint8 y)
+  305          {
+  306   1          int16 sum,dif;
+  307   1          sum=x+y;
+  308   1          dif=x-y;
+  309   1          if(sum<sum_th)return 0;
+  310   1          if(sum==0)return 0;
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 6   
+
+  311   1          if((dif < (int16)cbh_mindiff) && (dif > -(int16)cbh_mindiff))return 0;  // 灰度差相近
+  312   1          // if(dif>0)return dif*100/sum;
+  313   1          // else if(dif<0)return -dif*100/sum;
+  314   1          dif=abs(dif);
+  315   1          if(100*dif>sum*cbhyuzhi)return 1 ;
+  316   1          else return 0;
+  317   1      }
+  318          uint8 cbh_zcbl(uint8 x, uint8 y)
+  319          {
+  320   1          int16 sum,dif;
+  321   1          sum=x+y;
+  322   1          dif=x-y;
+  323   1          if(sum<sum_th)return 0;
+  324   1          if(sum==0)return 0;
+  325   1          if((dif < (int16)cbh_mindiff) && (dif > -(int16)cbh_mindiff))return 0;  // 灰度差相近
+  326   1          // if(dif>0)return dif*100/sum;
+  327   1          // else if(dif<0)return -dif*100/sum;
+  328   1          dif=abs(dif);
+  329   1          if(100*dif>sum*cbhyuzhi_zcbl)return 1 ;
+  330   1          else return 0;
+  331   1      }
+  332          void shizi_zhaodian(void)
+  333          {
+  334   1          uint8 zuoshang_point_row=0;
+  335   1          uint8 zuoxia_point_row=0;
+  336   1          uint8 youshang_point_row=0;
+  337   1          uint8 youxia_point_row=0;
+  338   1      
+  339   1          if (find_shizi())
+  340   1          {
+  341   2              shizi_flag=1;
+  342   2              zuoshang_point_row = find_zuoshang_point();
+  343   2              zuoxia_point_row = find_zuoxia_point();
+  344   2              youshang_point_row = find_youshang_point();
+  345   2              youxia_point_row = find_youxia_point();
+  346   2              // 找点操作
+  347   2              if ( !youshang_point_row && !zuoshang_point_row) // 两个上点都为零找不着
+  348   2              {
+  349   3                  return;
+  350   3              }
+  351   2          }
+  352   1          else 
+  353   1          {
+  354   2              shizi_flag = 0; 
+  355   2              return;
+  356   2          }
+  357   1      
+  358   1          if(zuoxia_point_row<zuoshang_point_row)zuoxia_point_row=0;
+  359   1          if(youxia_point_row<youshang_point_row)youxia_point_row=0; // 下不可能比上还上
+  360   1          // if(zuoshang_point_row<youshang_point_row)return ; //左不可能大于右
+  361   1      
+  362   1      
+  363   1          if(zuoxia_point_row!=0 && youxia_point_row != 0)//四个点很爽 11
+  364   1          {
+  365   2              shizi_buxian(L_edge[zuoxia_point_row].col,zuoxia_point_row,L_edge[zuoshang_point_row].col,zuoshan
+             -g_point_row,0);
+  366   2              shizi_buxian(R_edge[youxia_point_row].col,youxia_point_row,R_edge[youshang_point_row].col,youshan
+             -g_point_row,1);
+  367   2          }
+  368   1          else if(!zuoxia_point_row&&youxia_point_row!=0)//01
+  369   1          {
+  370   2              shizi_buxian(R_edge[youxia_point_row].col,youxia_point_row,R_edge[youshang_point_row].col,youshan
+             -g_point_row,1);
+  371   2              shangdian_buxian(zuoshang_point_row,0);
+  372   2          }
+  373   1          else if(zuoxia_point_row!=0 && !youxia_point_row)//10
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 7   
+
+  374   1          {
+  375   2              shizi_buxian(L_edge[zuoxia_point_row].col,zuoxia_point_row,L_edge[zuoshang_point_row].col,zuoshan
+             -g_point_row,0);
+  376   2              shangdian_buxian(youshang_point_row,1);
+  377   2          }
+  378   1          else if(  !zuoxia_point_row && !youxia_point_row)//00
+  379   1          {
+  380   2              shangdian_buxian(zuoshang_point_row,0);
+  381   2              shangdian_buxian(youshang_point_row,1);
+  382   2          }
+  383   1          else return ;
+  384   1      }
+  385          // @note bool等于零 补左线 等于一 补右线
+  386          void shizi_buxian(float x1, float  y1,float x2, float y2, uint8 type)//补线操作
+  387          {
+  388   1        float k , b ;
+  389   1          uint8 start,end;
+  390   1          if((x1==x2)||(y1==y2))return;
+  391   1          k = (y2-y1)/(x2-x1);
+  392   1          b= y1- k*x1;
+  393   1          if(y1 < y2)
+  394   1          {
+  395   2              start = y1;
+  396   2              end   = y2;
+  397   2          }   
+  398   1          else 
+  399   1          {
+  400   2              start = y2;
+  401   2              end   = y1;
+  402   2          }
+  403   1          for(;start<= end ;start++)
+  404   1          {
+  405   2              if(!type)
+  406   2              {
+  407   3                  int shizibuxian_L=(int)((((float)start-b)*1000.0f)/(float)(k*1000.0f));
+  408   3                  if(shizibuxian_L<0)shizibuxian_L=0;
+  409   3                  else if(shizibuxian_L>MT9V03X_W-1)    shizibuxian_L=MT9V03X_W-1;
+  410   3                  L_edge[start].col=shizibuxian_L;
+  411   3                  L_edge[start].flag=hit;
+  412   3              }
+  413   2              else 
+  414   2              {   
+  415   3                  int shizibuxian_R=(int)((((float)start-b)*1000.0f)/(float)(k*1000.0f));
+  416   3                  if(shizibuxian_R<0)shizibuxian_R=0;
+  417   3                  else if (shizibuxian_R>MT9V03X_W-1)    shizibuxian_R=MT9V03X_W-1;
+  418   3                  R_edge[start].col=shizibuxian_R;
+  419   3                  R_edge[start].flag=hit;
+  420   3              }
+  421   2          }
+  422   1      }
+  423          float   parameterA       = 0.0f;            // 截距 b   （直线：列 = parameterB * 行 + parameterA
+             -）
+  424          float   parameterB       = 0.0f;            // 斜率 k
+  425          
+  426          void shangdian_buxian(uint8 y1,uint8 type)//上点补线 // x1 左上点 type 0 left 1 right 
+  427          {
+  428   1          float zuoxian_pos_chuliqian;
+  429   1          float youxian_pos_chuliqian;
+  430   1          if(!type)
+  431   1          {    
+  432   2              advanced_regression(0,y1-3,y1,0 ,0);
+  433   2              if(parameterB==0.0f)return;
+  434   2              for(;y1<=start_row;y1++)
+  435   2              {
+  436   3                  if(L_edge[y1].flag == lost)//确实是需要补线的情况（扫过了但没找到）
+  437   3                  {
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 8   
+
+  438   4                     
+  439   4                      zuoxian_pos_chuliqian = parameterB * (float)y1 + parameterA;
+  440   4                      if(zuoxian_pos_chuliqian < 0)   zuoxian_pos_chuliqian = 0;
+  441   4                      if(zuoxian_pos_chuliqian > 187) zuoxian_pos_chuliqian = 187;
+  442   4                      L_edge[y1].col = (int)zuoxian_pos_chuliqian;
+  443   4                      L_edge[y1].flag = hit;
+  444   4                  }
+  445   3              }
+  446   2          }
+  447   1          else 
+  448   1          {
+  449   2              advanced_regression(1,y1-3,y1,0 ,0);
+  450   2              if(parameterB==0.0f)return ;
+  451   2              for(;y1<=start_row;y1++)
+  452   2              {
+  453   3                  if(R_edge[y1].flag == lost)//确实是需要补线的情况（扫过了但没找到）
+  454   3                  {
+  455   4                      youxian_pos_chuliqian = parameterB * (float)y1 + parameterA;
+  456   4                      if(youxian_pos_chuliqian < 0)   youxian_pos_chuliqian = 0;
+  457   4                      if(youxian_pos_chuliqian > 187) youxian_pos_chuliqian = 187;
+  458   4                      R_edge[y1].col = (int)youxian_pos_chuliqian;
+  459   4                      R_edge[y1].flag = hit;
+  460   4      
+  461   4      
+  462   4                  }
+  463   3              }
+  464   2          }
+  465   1      }
+  466          void advanced_regression (uint8 type, int startline1, int endline1, int startline2, int endline2)
+  467          {
+  468   1          point*  p;
+  469   1          int16   i;
+  470   1          int32   cnt       = 0;
+  471   1          int32   sumX      = 0;
+  472   1          int32   sumY      = 0;
+  473   1          int32   averageX  = 0;
+  474   1          int32   averageY  = 0;
+  475   1          int32   sumUp     = 0;
+  476   1          int32   sumDown   = 0;
+  477   1      
+  478   1          if(type==0)p = L_edge;
+  479   1          else if(type == 1)p = R_edge;
+  480   1          else p = L_edge;            /* type=3 的中线拟合见 advanced_regression_zhongxian */
+  481   1          
+  482   1          //---------------- 第一遍：累加求重心（均值）----------------
+  483   1          for(i = (int16)startline1; i < (int16)endline1; i ++)
+  484   1          {
+  485   2              if(i < 0 || i > HANG_MAX)       continue;
+  486   2              if(fit_valid(type, i) == 0)     continue;
+  487   2              cnt ++;
+  488   2              sumX += (int32)i;                // x = hang 索引
+  489   2              sumY += (int32)p[i].col;             // y = 该行记录的列号
+  490   2          }
+  491   1          for(i = (int16)startline2; i < (int16)endline2; i ++)
+  492   1          {
+  493   2              if(i < 0 || i > HANG_MAX)       continue;
+  494   2              if(fit_valid(type, i) == 0)     continue;
+  495   2              cnt ++;
+  496   2              sumX += (int32)i;
+  497   2              sumY += (int32)p[i].col;
+  498   2          }
+  499   1          if(cnt < 2)                          // 有效点太少，拟合无意义
+  500   1          {
+  501   2              parameterA = 0.0f;
+  502   2              parameterB = 0.0f;
+  503   2              return;
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 9   
+
+  504   2          }
+  505   1          // 注意：这里是 int32 先做整数除法，再赋值，不再出现"先除后转 float"的截�
+             -�
+  506   1          averageX = sumX / cnt;
+  507   1          averageY = sumY / cnt;
+  508   1          //---------------- 第二遍：求 Σ(x-x?)(y-?) 与 Σ(x-x?)? ----------------
+  509   1          for(i = (int16)startline1; i < (int16)endline1; i ++)   
+  510   1          {
+  511   2              if(i < 0 || i > HANG_MAX)       continue;
+  512   2              if(fit_valid(type, i) == 0)     continue;
+  513   2              sumUp   += ((int32)p[i].col - averageY) * ((int32)i - averageX);
+  514   2              sumDown += ((int32)i - averageX) * ((int32)i - averageX);
+  515   2          }
+  516   1          for(i = (int16)startline2; i < (int16)endline2; i ++)
+  517   1          {
+  518   2              if(i < 0 || i > HANG_MAX)       continue;
+  519   2              if(fit_valid(type, i) == 0)     continue;
+  520   2              sumUp   += ((int32)p[i].col - averageY) * ((int32)i - averageX);
+  521   2              sumDown += ((int32)i - averageX) * ((int32)i - averageX);
+  522   2          }
+  523   1          //---------------- 出结果 ----------------
+  524   1          if(sumDown == 0)                                // 所有点 hang 相同，拟合无意义
+  525   1          {
+  526   2              parameterA = 0.0f;
+  527   2              parameterB = 0.0f;
+  528   2          }
+  529   1          else
+  530   1          {
+  531   2              parameterB = (float)sumUp / (float)sumDown;                    // 斜率 k = Δ列/Δ行
+  532   2              parameterA = (float)averageY - parameterB * (float)averageX;   // 截距 b = 列均值 - k*行均
+             -值
+  533   2          }
+  534   1      }
+  535          int advanced_regression_zhongxian (uint8 type, int startline1, int endline1, int startline2, int endline2
+             -)
+  536          {
+  537   1          f_point*p;
+  538   1          int16   i;
+  539   1          int32   cnt       = 0;
+  540   1          int32   sumX      = 0;
+  541   1          int32   sumY      = 0;
+  542   1          int32   averageX  = 0;
+  543   1          int32   averageY  = 0;
+  544   1          int32   sumUp     = 0;
+  545   1          int32   sumDown   = 0;
+  546   1          int32   parameterB_zhongxian=0;
+  547   1          p = middle_line;
+  548   1          //---------------- 第一遍：累加求重心（均值）----------------
+  549   1          for(i = (int16)startline1; i < (int16)endline1; i ++)
+  550   1          {
+  551   2              if(i < 0 || i > HANG_MAX)       continue;
+  552   2              // if(fit_valid(type, i) == 0)     continue;
+  553   2              cnt ++;
+  554   2              sumX += (int32)i;                // x = hang 索引
+  555   2              sumY += (int32)p[i].col;             // y = 该行记录的列号
+  556   2          }
+  557   1          for(i = (int16)startline2; i < (int16)endline2; i ++)
+  558   1          {
+  559   2              if(i < 0 || i > HANG_MAX)       continue;
+  560   2              // if(fit_valid(type, i) == 0)     continue;
+  561   2              cnt ++;
+  562   2              sumX += (int32)i;
+  563   2              sumY += (int32)p[i].col;
+  564   2          }
+  565   1      
+  566   1          // 注意：这里是 int32 先做整数除法，再赋值，不再出现"先除后转 float"的截�
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 10  
+
+             -�
+  567   1          averageX = sumX / cnt;
+  568   1          averageY = sumY / cnt;
+  569   1          //---------------- 第二遍：求 Σ(x-x?)(y-?) 与 Σ(x-x?)? ----------------
+  570   1          for(i = (int16)startline1; i < (int16)endline1; i ++)   
+  571   1          {
+  572   2              if(i < 0 || i > HANG_MAX)       continue;
+  573   2              // if(fit_valid(type, i) == 0)     continue;
+  574   2              sumUp   += ((int32)p[i].col - averageY) * ((int32)i - averageX);
+  575   2              sumDown += ((int32)i - averageX) * ((int32)i - averageX);
+  576   2          }
+  577   1          for(i = (int16)startline2; i < (int16)endline2; i ++)
+  578   1          {
+  579   2              if(i < 0 || i > HANG_MAX)       continue;
+  580   2              // if(fit_valid(type, i) == 0)     continue;
+  581   2              sumUp   += ((int32)p[i].col - averageY) * ((int32)i - averageX);
+  582   2              sumDown += ((int32)i - averageX) * ((int32)i - averageX);
+  583   2          }
+  584   1          //---------------- 出结果 ----------------
+  585   1          if(sumDown == 0)                                // 所有点 hang 相同，拟合无意义
+  586   1          {
+  587   2              parameterB_zhongxian = 0.0f;
+  588   2          }
+  589   1          else
+  590   1          {
+  591   2              parameterB_zhongxian = (float)sumUp*100 / (float)sumDown;                    // 斜率 k = Δ列/
+             -Δ行
+  592   2          }
+  593   1          return parameterB_zhongxian;
+  594   1      }
+*** WARNING C47 IN LINE 535 OF ..\user\vision.c: 'type': unreferenced parameter
+  595          
+  596          static uint8 fit_valid (uint8 type, int i)
+  597          {
+  598   1          if(type == 0) return (L_edge[i].flag == hit) ? 1 : 0;
+  599   1          if(type == 1) return (R_edge[i].flag == hit) ? 1 : 0;
+  600   1          if(type == 3) return ((L_edge[i].flag == hit) && (R_edge[i].flag == hit)) ? 1 : 0;
+  601   1          return 0;
+  602   1      }
+  603          
+  604          
+  605          void track_scan_zbh_zuichangbailie(void)
+  606          {
+  607   1          uint8 zuichang=0;
+  608   1          uint8 chang; ///先扫最长白列
+  609   1          uint8 col,row,zhongxian,col_r,col_l,zcbl_col;
+  610   1          int16 l,r;
+  611   1      
+  612   1          for( col =10; col<= 178;col+=3)  
+  613   1          {
+  614   2              chang=0;//mt903x_image[row(110)][col];
+  615   2              for( row=110;row>=2;row-=2)
+  616   2              {
+  617   3                  if(mt9v03x_image[row][col]>118)chang++;
+  618   3                  else break;
+  619   3              }
+  620   2              if(zuichang<chang)
+  621   2              {
+  622   3                  zuichang=chang;//赋值
+  623   3                  zcbl_col = col;
+  624   3              }
+  625   2          }
+  626   1      
+  627   1          for(row=118;row>=2;row-=2)
+  628   1          {
+  629   2              if(mt9v03x_image[row][zcbl_col]>118)tft180_draw_point(zcbl_col *3/4, row *3/4, RGB565_YELLOW);//�
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 11  
+
+             -��出最长白列
+  630   2              else break;        
+  631   2          }
+  632   1          
+  633   1          for(row = 118; row >=2; row-=2)
+  634   1          {
+  635   2             if(zcbl_col<1)zcbl_col=1;
+  636   2             else if(zcbl_col > 186)zcbl_col=186;
+  637   2             l=-1;
+  638   2             r=-1;
+  639   2             for(col_r=zcbl_col;col_r<=186;col_r++)//向右扫
+  640   2             {
+  641   3                  if(cbh(mt9v03x_image[row][col_r+1],mt9v03x_image[row][col_r]) )
+  642   3                  {
+  643   4                      tft180_draw_point(col_r  *3/4, row *3/4, RGB565_BLUE);
+  644   4                      r=col_r;
+  645   4                      break;
+  646   4                  }
+  647   3             }
+  648   2             for(col_l=zcbl_col;col_l>0;col_l--)//向左扫
+  649   2             {
+  650   3                  if(cbh(mt9v03x_image[row][col_l-1],mt9v03x_image[row][col_l]))
+  651   3                  {
+  652   4                      tft180_draw_point(col_l *3/4, row *3/4, RGB565_RED);
+  653   4                      l=col_l;
+  654   4                      break;
+  655   4                  }
+  656   3             }    
+  657   2             if(l<0||r<0)continue;
+  658   2             zhongxian=(l+r)/2;
+  659   2             tft180_draw_point(zhongxian *3/4,row *3/4,RGB565_GRAY);
+  660   2          }
+  661   1      }
+  662          void    judge_stop()
+  663          {
+  664   1          if(!iswhite(mt9v03x_image[angle_row][94]) && ! iswhite(mt9v03x_image[angle_row][50]) && !iswhite(mt9v
+             -03x_image[angle_row][130])&& !iswhite(mt9v03x_image[angle_row+20][94])&& !iswhite(mt9v03x_image[angle_row+20][50])  && !
+             -iswhite(mt9v03x_image[angle_row+20][130]))
+  665   1          {
+  666   2              stop_flag = 1;   
+  667   2          } 
+  668   1          else stop_flag = 0 ;
+  669   1          // if(stop_flag)
+  670   1          // {
+  671   1              
+  672   1          //     speed_sum=0;
+  673   1          // }
+  674   1      }
+  675          
+  676          void find_left_inflection_point()
+  677          {
+  678   1          
+  679   1      }
+  680          
+  681          
+  682          // uint8 zhidao_cnt=0;
+  683          // uint8 zhidao_flag=0;
+  684          // float chongci_chuli=0;
+  685          // int16 zhidao_chongci()
+  686          // {
+  687          //     if(!shizi_flag)
+  688          //     {
+  689          //         chongci_chuli = advanced_regression_zhongxian(3,qujiaohang-8,qujiaohang-6,qujiaohang-12,qujiao
+             -hang-10);
+  690          //         if(chongci_chuli<25&&chongci_chuli>-25)zhidao_cnt++;
+  691          //         else zhidao_cnt=0;
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 12  
+
+  692          //         if(zhidao_cnt>50)zhidao_cnt=50;
+  693          //         zhidao_state();
+  694          //         if(zhidao_flag)
+  695          //         {
+  696          //             return 6500;
+  697          //         }
+  698          //         else return 4500;
+  699          //     }
+  700          //     return 4500;
+  701          // }
+  702          // void zhidao_state()
+  703          // {
+  704          //     if(zhidao_cnt>=5)zhidao_flag=1;
+  705          //     else zhidao_flag=0;
+  706          // }
+  707          // void     track_scan_cbh     (void)//推线
+  708          // {
+  709          //     int16 zhongxian = 94;
+  710          //     int16 col_r, col_l,row;
+  711          //     uint8 saojiaohang;
+  712          //     L_lost_time=0,R_lost_time=0,zong_lost_time=0;
+  713          //     // int16 l,r ; //丢线逻辑，暂且封印
+  714          //     //描角行
+  715          //     // for(saojiaohang=50;saojiaohang<=90;saojiaohang++)tft180_draw_point(saojiaohang * 3 / 4,jiaohang
+             -_row * 3 / 4 ,RGB565_BROWN);//描出角行便于调试
+  716          //     for(row = qisaohang; row >=2; row-=2)//118 ~ 0
+  717          //     {
+  718          //        if(zhongxian<1)zhongxian=1;
+  719          //        else if(zhongxian > 186)zhongxian=186;
+  720          //        for(col_r=zhongxian;col_r<=186;col_r++)
+  721          //        {
+  722          //             if(cbh(mt9v03x_image[row][col_r+1],mt9v03x_image[row][col_r]) > cbhyuzhi )
+  723          //             {
+  724          //                 // tft180_draw_point(col_r  *3/4, row *3/4, RGB565_BLUE);
+  725          //                 youxian_pos[row/2]=col_r;
+  726          //                 R_flag[row/2]=1;
+  727          //                 break;
+  728          //             }
+  729          //             else 
+  730          //             {
+  731          //                 R_flag[row/2]=0;
+  732          //                 youxian_pos[row/2]=col_r;
+  733          //             }
+  734          //        }
+  735          //        for(col_l=zhongxian;col_l>0;col_l--)
+  736          //        {
+  737          //             if(cbh(mt9v03x_image[row][col_l-1],mt9v03x_image[row][col_l]) > cbhyuzhi)
+  738          //             {
+  739          //                 // tft180_draw_point(col_l *3/4, row *3/4, RGB565_RED);
+  740          //                 zuoxian_pos[row/2]=col_l;
+  741          //                 L_flag[row/2]=1;
+  742          //                 break;
+  743          //             }
+  744          //             else 
+  745          //             {   
+  746                      
+  747          //                 L_flag[row/2]=0;
+  748          //                 zuoxian_pos[row/2]=col_l;
+  749          //             }
+  750                      
+  751          //         }
+  752                  
+  753          //         if(R_flag[row/2]==0)R_lost_time++;
+  754          //         if(L_flag[row/2]==0)L_lost_time++;
+  755          
+  756          //         zhongxian=(col_l+col_r)/2;
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 13  
+
+  757          //         zhongxian_pos[row/2] = zhongxian;
+  758          //         // tft180_draw_point(zhongxian *3/4,row *3/4,RGB565_GRAY);
+  759          //     }
+  760          //     if(L_lost_time>R_lost_time)zong_lost_time=L_lost_time;
+  761          //     else zong_lost_time = R_lost_time;//计算丢线次数
+  762          //     zong_lost_time*=2;
+  763          // }
+  764          // #define Black 0
+  765          // #define White 255
+  766          /* ----------------------------------------------------------
+  767           * set_image_towvalues -- 全局二值化
+  768           * 参数: value -- 阈值; 小于阈值置 Black(0), 否则 White(254)
+  769           * 做法: 从 want_end_row 开始逐字节搬运, 循环一次展开 4 个像素
+  770           * 注意: 要求总像素数为 4 的倍数(188 列满足), 否则尾部会漏 1~3 个像素
+  771           * ---------------------------------------------------------- */
+  772          // void set_image_towvalues(uint8 value)
+  773          // {
+  774          //     uint32 total_pixels = (120 - 10) * 180;
+  775          //     uint8 *src = (uint8 *)&mt9v03x_image[10][0];
+  776          //     uint8 *dst = (uint8 *)&image_buffer[10][0];
+  777              
+  778          //     // 每循环处理 4 个像素
+  779          //     uint32 n = total_pixels >> 2; // 右移 2 位相当于除以 4
+  780              
+  781          //     while (n--)
+  782          //     {
+  783          //         *dst++ = (*src++ < value) ? Black : White;
+  784          //         *dst++ = (*src++ < value) ? Black : White;
+  785          //         *dst++ = (*src++ < value) ? Black : White;
+  786          //         *dst++ = (*src++ < value) ? Black : White;
+  787          //     }
+  788          //     // (注意: 若总像素数不是 4 的倍数, 需在此循环后单独处理剩下的 1~3 个像�
+             -��)
+  789          // }
+  790          
+  791          
+  792          //(x,y)
+  793          
+  794          // int L_ver[8][2]={{0,-1},{+1,-1},{+1,0},{+1,+1},{0,+1},{-1,+1},{-1,0},{-1,-1}};//顺时针
+  795          // int R_ver[8][2]={{0,-1},{-1,-1},{-1,0},{-1,+1},{0,+1},{+1,+1},{+1,0},{+1,-1}};//逆时针
+  796          
+  797          
+  798          // int middle_col = 94;//种子列
+  799          
+  800          // point L_edge[120];
+  801          // point R_edge[120];
+  802          // f_point middle_line[120];
+  803          
+  804          // void find_seed_row(void)
+  805          // {
+  806          //     int col=0;
+  807          //     int chang=0,zuichang=0,zcbl_col1=0;int row,zcbl_col2=0;
+  808          //     memset(middle_line,0,sizeof(middle_line));
+  809              
+  810          //      for( col =eight_left_edge; col<=eight_right_edge;col+=5)  
+  811          //     {
+  812          //         chang=0;//mt903x_image[row(110)][col];
+  813          //         for( row=110;row>=2;row-=2)
+  814          //         {
+  815          //             if(mt9v03x_image[row][col]>125)chang++;
+  816          //             else break;
+  817          //         }
+  818          //         if(zuichang<chang)
+  819          //         {
+  820          //             zuichang=chang;//赋值
+  821          //             zcbl_col1 = col;
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 14  
+
+  822          //         }
+  823          //     }
+  824          //     zuichang=0;
+  825          //     for( col =eight_right_edge; col>=eight_left_edge;col-=5)  
+  826          //     {
+  827          //         chang=0;//mt903x_image[row(110)][col];
+  828          //         for( row=110;row>=2;row-=2)
+  829          //         {
+  830          //             if(mt9v03x_image[row][col]>125)chang++;
+  831          //             else break;
+  832          //         }
+  833          //         if(zuichang<chang)
+  834          //         {
+  835          //             zuichang=chang;//赋值
+  836          //             zcbl_col2 = col;
+  837          //         }
+  838          //     }
+  839          //     middle_col = (zcbl_col1+zcbl_col2)/2;
+  840          // }
+  841          
+  842          // void eight_left(int cnt)//扫左边线
+  843          // {
+  844              
+  845          //     int c;
+  846          //     int r;
+  847          //     point seed_left;
+  848          //     int dirction_L=3;
+  849          //     uint8 left_seed_flag=0; 
+  850          //     int last_dir=0;
+  851          //     uint8 k=0;
+  852          //     memset(L_edge,0,sizeof(L_edge));
+  853          
+  854          //     seed_left.col =eight_left_edge ;
+  855          //     seed_left.row =start_row;    //起扫行扫边线
+  856              
+  857          //     for(c = middle_col; c>eight_left_edge ;c--)//找左侧种子
+  858          //     {
+  859          //         if(cbh(mt9v03x_image[start_row][c],mt9v03x_image[start_row][c-1]) &&(mt9v03x_image[start_row][
+             -c] - mt9v03x_image[start_row][c-1])>0)//找白黑跳变
+  860          //         {
+  861          //             // 找到左下种子
+  862          //             L_edge[start_row].col=c;
+  863          
+  864          //             L_edge[start_row].row=start_row;
+  865          //             L_edge[start_row].flag=1;
+  866          //             seed_left.col=c;    seed_left.row=start_row;
+  867          //             left_seed_flag=1;
+  868          //             break;
+  869          //         }
+  870          //     }
+  871          //     if(left_seed_flag==0)
+  872          //     {
+  873          //         seed_left.col=eight_left_edge;
+  874          //         seed_left.row=start_row;//设置种子边界
+  875          //         L_edge[start_row].row =start_row;
+  876          //         L_edge[start_row].col =eight_left_edge;
+  877          //         L_edge[start_row].flag=0;
+  878          //     }
+  879          
+  880          
+  881          //     while(cnt--)
+  882          //     {
+  883          //         //开局种子可能处于一圈空白的位置，此时列为2，直接往上搜黑白跳变�
+             -��作为种子   往后十字路口拐角左边搜索到边界时，就算能搜到黑白跳变,但也需要往上爬
+  884          //         if(seed_left.col <= eight_left_edge)//种子在左边界，往上爬
+  885          //         {
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 15  
+
+  886          //             for(r=seed_left.row;r>=end_row;r--)
+  887          //             {
+  888          //                 if(cbh(mt9v03x_image[r-1][eight_left_edge],mt9v03x_image[r][eight_left_edge]) && (mt9v
+             -03x_image[r][eight_left_edge] - mt9v03x_image[r-1][eight_left_edge])>0)//从下方爬上去 找白黑跳变点
+  889          //                 {
+  890          //                     L_edge[r].col=eight_left_edge;
+  891          
+  892          //                     L_edge[r].row=r;
+  893          //                     L_edge[r].flag=0;
+  894          //                     //记录边线
+  895          //                     seed_left.col= eight_left_edge;
+  896          //                     seed_left.row= r;
+  897          //                     //记录种子
+  898          //                     break;
+  899          //                 }
+  900          //                 L_edge[r].col =eight_left_edge;
+  901          //                 L_edge[r].row =r;
+  902          //                 L_edge[r].flag=0;
+  903          //             }
+  904          //         }
+  905          //         for(k=0;k<8;k++)
+  906          //         {
+  907          //             int p=(last_dir+k)%8;
+  908          //             int x0,y0,x1,y1;
+  909          //             x0=seed_left.col+L_ver[(p + dirction_L   )% 8 ][0];   
+  910          //             y0=seed_left.row+L_ver[(p + dirction_L   )% 8 ][1];
+  911          //             x1=seed_left.col+L_ver[(p + dirction_L +1)% 8 ][0];   
+  912          //             y1=seed_left.row+L_ver[(p + dirction_L +1)% 8 ][1];
+  913          
+  914          //             if(y1>start_row||y0>start_row || x1>=MT9V03X_W || x0>=MT9V03X_W)continue;
+  915          //             if(y1<=end_row||y0<=end_row || x1<=0 || x0<=0)continue;
+  916          
+  917          //             if(cbh(mt9v03x_image[y0][x0],mt9v03x_image[y1][x1]) && (-mt9v03x_image[y0][x0]+mt9v03x_ima
+             -ge[y1][x1])>0)//找黑白跳变点
+  918          //             {
+  919          //                 seed_left.col = x1;//继承种子
+  920          //                 seed_left.row = y1;
+  921          //                 L_edge[seed_left.row].col=seed_left.col;
+  922          //                 L_edge[seed_left.row].row=seed_left.row;
+  923          //                 L_edge[seed_left.row].flag=1;
+  924          //                 last_dir = p;
+  925          //                 break;
+  926          //             }
+  927          //         }
+  928          //         if(seed_left.row<=end_row+1)//突破上限了直接关
+  929          //         {
+  930          //             break;
+  931          //         }
+  932          //     }
+  933          // }
+  934          
+  935          
+  936          // void eight_right(int cnt)//扫左边线
+  937          // {
+  938          //     int c_r;
+  939          //     int r_r;
+  940          //     point seed_right;
+  941          //     uint8 k_r=0;
+  942          //     int8 last_dir=0;
+  943          //     int dirction_R =3;
+  944          //     uint8 right_seed_flag=0;
+  945          //     seed_right.col =eight_right_edge ;
+  946          //     seed_right.row =start_row;    //起扫行扫边线
+  947          //     memset(R_edge,0,sizeof(R_edge));
+  948          //     for(c_r = middle_col; c_r<=eight_right_edge ;c_r++)//找右侧种子
+  949          //     {
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 16  
+
+  950          //         if(cbh(mt9v03x_image[start_row][c_r],mt9v03x_image[start_row][c_r+1]) &&(mt9v03x_image[start_r
+             -ow][c_r] - mt9v03x_image[start_row][c_r+1])>0)//找白黑跳变
+  951          //         {
+  952          //             // 找到右下种子
+  953          //             R_edge[start_row].col=c_r;
+  954                      
+  955          //             R_edge[start_row].row=start_row;
+  956          //             R_edge[start_row].flag=1;
+  957          //             seed_right.col=c_r;    
+  958          //             seed_right.row=start_row;
+  959          //             right_seed_flag=1;
+  960          //             break;
+  961          //         }
+  962          //     }//找不到
+  963          //     if(right_seed_flag==0)
+  964          //     {
+  965          //         seed_right.col=eight_right_edge;
+  966          //         seed_right.row=start_row;//设置种子边界
+  967          //         R_edge[start_row].row =start_row;
+  968          //         R_edge[start_row].col =eight_right_edge;
+  969          //         R_edge[start_row].flag=0;
+  970          //     }
+  971          //     while(cnt--)
+  972          //     {
+  973          //         //开局种子可能处于一圈空白的位置，此时列为2，直接往上搜黑白跳变�
+             -��作为种子   往后十字路口拐角左边搜索到边界时，就算能搜到黑白跳变,但也需要往上爬
+  974          //         if(seed_right.col >= eight_right_edge)//种子在右边界，往上爬
+  975          //         {
+  976          //             for(r_r=seed_right.row;r_r>=end_row;r_r--)
+  977          //             {
+  978          //                 if(cbh(mt9v03x_image[r_r-1][eight_right_edge],mt9v03x_image[r_r][eight_right_edge]) &&
+             - (mt9v03x_image[r_r][eight_right_edge] - mt9v03x_image[r_r-1][eight_right_edge])>0)//从下方爬上去 找白黑跳变�
+             -��
+  979          //                 {
+  980          //                     R_edge[r_r].col=eight_right_edge;
+  981          //                     R_edge[r_r].row=r_r;
+  982          //                     R_edge[r_r].flag=0;
+  983          //                     //记录边线
+  984          //                     seed_right.col= eight_right_edge;
+  985          //                     seed_right.row= r_r;
+  986          //                     //记录种子
+  987          //                     break;
+  988          //                 }
+  989          //                 R_edge[r_r].col =eight_right_edge;
+  990          //                 R_edge[r_r].row =r_r;
+  991          //                 R_edge[r_r].flag=0;
+  992          //             }
+  993          //         }
+  994          //         //正经爬线
+  995          //         for(k_r=0;k_r<8;k_r++)
+  996          //         {
+  997          //             int p = (last_dir+k_r)%8;
+  998          //             int x0,y0,x1,y1;
+  999          //             x0=seed_right.col+R_ver[(p + dirction_R   )% 8 ][0];   
+ 1000          //             y0=seed_right.row+R_ver[(p + dirction_R   )% 8 ][1];
+ 1001          //             x1=seed_right.col+R_ver[(p + dirction_R +1)% 8 ][0];   
+ 1002          //             y1=seed_right.row+R_ver[(p + dirction_R +1)% 8 ][1];
+ 1003          //             if(y1>start_row||y0>start_row || x1>=MT9V03X_W || x0>=MT9V03X_W)continue;
+ 1004          //             if(y1<=end_row||y0<=end_row || x1<=0 || x0<=0)continue;
+ 1005          //             if(cbh(mt9v03x_image[y0][x0],mt9v03x_image[y1][x1]) && (-mt9v03x_image[y0][x0]+mt9v03x_ima
+             -ge[y1][x1])>0)//找黑白跳变点
+ 1006          //             {
+ 1007          //                 seed_right.col = x1;//继承种子
+ 1008          //                 seed_right.row = y1;
+ 1009          //                 R_edge[seed_right.row].col=seed_right.col;
+ 1010          //                 R_edge[seed_right.row].row=seed_right.row;
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 17  
+
+ 1011          //                 R_edge[seed_right.row].flag=1;
+ 1012          //                 last_dir = p;
+ 1013          //                 break;
+ 1014          //             }
+ 1015          //         }
+ 1016          //         //提前结束避免空转
+ 1017          //         if(seed_right.row<=end_row+1)//突破上限了直接关
+ 1018          //         {
+ 1019          //             break;
+ 1020          //         }
+ 1021          
+ 1022          //     }
+ 1023          // }
+ 1024          void middle_line_update(void)
+ 1025          {
+ 1026   1          int r;
+ 1027   1          for( r = start_row ; r>=end_row;r--)
+ 1028   1          {
+ 1029   2              middle_line[r].row=r;
+ 1030   2      
+ 1031   2              if(L_edge[r].flag==hit || R_edge[r].flag==hit)              /* 至少一边命中：开始更新 
+             -*/
+ 1032   2              {
+ 1033   3                  middle_line[r].col=(int)(R_edge[r].col+ L_edge[r].col)/2;
+ 1034   3                  middle_line[r].flag = hit;
+ 1035   3              }
+ 1036   2              else if(L_edge[r].flag==lost && R_edge[r].flag==lost)       /* 两边都丢：继承更近一行 
+             -*/
+ 1037   2              {
+ 1038   3                  if(r < start_row) middle_line[r].col = middle_line[r+1].col;
+ 1039   3                  else              middle_line[r].col = middle_col;      /* 最后一行没有更近行，用�
+             -��子列兜底 */
+ 1040   3                  middle_line[r].flag = lost;
+ 1041   3              }
+ 1042   2              else if(R_edge[r].flag==wait || L_edge[r].flag==wait)                 /* 含 wait：还没扫到�
+             -��直接不管 */
+ 1043   2              {
+ 1044   3                  middle_line[r].flag=wait;
+ 1045   3              }
+ 1046   2          }
+ 1047   1      }
+ 1048          // void find_edge(void)
+ 1049          // {
+ 1050          //     find_seed_row();
+ 1051          //     eight_left(150);
+ 1052          //     eight_right(150);
+ 1053          //     // eight_r_l(120);
+ 1054          //     middle_line_update();
+ 1055          // }
+ 1056          
+ 1057          
+ 1058          
+ 1059          
+ 1060          
+ 1061          
+ 1062          
+ 1063          
+ 1064          
+ 1065          
+ 1066          
+ 1067          
+ 1068          
+ 1069          
+ 1070          
+ 1071          
+ 1072          
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 18  
+
+ 1073          
+ 1074          
+ 1075          
+ 1076          
+ 1077          
+ 1078          
+ 1079          
+ 1080          
+ 1081          
+ 1082          // void eight_r_l(int cnt)
+ 1083          // { 
+ 1084          //     int c_r;
+ 1085          //     int r_r;
+ 1086          //     point seed_right;
+ 1087          //     uint8 k_r=0;
+ 1088          //     int8 last_dir=0;
+ 1089          //     int dirction_R =3;
+ 1090          //     uint8 right_seed_flag=0;
+ 1091          //     int c_l;
+ 1092          //     int r_l;
+ 1093          //     point seed_left;
+ 1094          //     int dirction_L=3;
+ 1095          //     uint8 left_seed_flag=0;
+ 1096          //     int last_dir_l=0;
+ 1097          //     uint8 k_l=0;
+ 1098          //     int cnt_l = cnt;                /* 左线自己的步数，不能左右共用一个 cnt */
+ 1099          //     int cnt_r = cnt;                /* 右线自己的步数 */
+ 1100          
+ 1101          //     memset(L_edge,0,sizeof(L_edge));//清空
+ 1102          //     memset(R_edge,0,sizeof(R_edge));
+ 1103          //     seed_right.col =eight_right_edge ;
+ 1104          //     seed_right.row =start_row;    //起扫行扫边线
+ 1105          //     seed_left.col =eight_left_edge ;
+ 1106          //     seed_left.row =start_row;    //起扫行扫边线
+ 1107          //     //爬左线*********************************
+ 1108          //     for(c_l = middle_col; c_l>eight_left_edge ;c_l--)//找左侧种子
+ 1109          //     {
+ 1110          //         if(cbh(mt9v03x_image[start_row][c_l],mt9v03x_image[start_row][c_l-1]) &&(mt9v03x_image[start_r
+             -ow][c_l] - mt9v03x_image[start_row][c_l-1])>0)//找白黑跳变
+ 1111          //         {
+ 1112          //             // 找到左下种子
+ 1113          //             L_edge[start_row].col=c_l;
+ 1114          
+ 1115          //             L_edge[start_row].row=start_row;
+ 1116          //             L_edge[start_row].flag=1;
+ 1117          //             seed_left.col=c_l;    seed_left.row=start_row;
+ 1118          //             left_seed_flag=1;
+ 1119          //             break;
+ 1120          //         }
+ 1121          //     }
+ 1122          //     if(left_seed_flag==0)
+ 1123          //     {
+ 1124          //         seed_left.col=eight_left_edge;
+ 1125          //         seed_left.row=start_row;//设置种子边界
+ 1126          //         L_edge[start_row].row =start_row;
+ 1127          //         L_edge[start_row].col =eight_left_edge;
+ 1128          //         L_edge[start_row].flag=0;
+ 1129          //     }
+ 1130          //     while(cnt_l--)//左线：用自己的步数
+ 1131          //     {
+ 1132          //         //开局种子可能处于一圈空白的位置，此时列为2，直接往上搜黑白跳变�
+             -��作为种子   往后十字路口拐角左边搜索到边界时，就算能搜到黑白跳变,但也需要往上爬
+ 1133          //         if(seed_left.col <= eight_left_edge)//种子在左边界，往上爬
+ 1134          //         {
+ 1135          //             for(r_l=seed_left.row;r_l>=end_row;r_l--)
+ 1136          //             {
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 19  
+
+ 1137          //                 if(cbh(mt9v03x_image[r_l-1][eight_left_edge],mt9v03x_image[r_l][eight_left_edge]) && (
+             -mt9v03x_image[r_l][eight_left_edge] - mt9v03x_image[r_l-1][eight_left_edge])>0)//从下方爬上去 找白黑跳变点
+ 1138          //                 {
+ 1139          //                     L_edge[r_l].col=eight_left_edge;
+ 1140          
+ 1141          //                     L_edge[r_l].row=r_l;
+ 1142          //                     L_edge[r_l].flag=0;
+ 1143          //                     //记录边线
+ 1144          //                     seed_left.col= eight_left_edge;
+ 1145          //                     seed_left.row= r_l;
+ 1146          //                     //记录种子
+ 1147          //                     break;
+ 1148          //                 }
+ 1149          //                 L_edge[r_l].col =eight_left_edge;
+ 1150          //                 L_edge[r_l].row =r_l;
+ 1151          //                 L_edge[r_l].flag=0;
+ 1152          //             }
+ 1153          //         }
+ 1154          //         for(k_l=0;k_l<8;k_l++)
+ 1155          //         {
+ 1156          //             int p=(last_dir_l+k_l)%8;
+ 1157          //             int x0,y0,x1,y1;
+ 1158          //             x0=seed_left.col+L_ver[(p + dirction_L   )% 8 ][0];   
+ 1159          //             y0=seed_left.row+L_ver[(p + dirction_L   )% 8 ][1];
+ 1160          //             x1=seed_left.col+L_ver[(p + dirction_L +1)% 8 ][0];   
+ 1161          //             y1=seed_left.row+L_ver[(p + dirction_L +1)% 8 ][1];
+ 1162          
+ 1163          //             if(y1>start_row||y0>start_row || x1>=MT9V03X_W || x0>=MT9V03X_W)continue;
+ 1164          //             if(y1<=end_row||y0<=end_row || x1<=0 || x0<=0)continue;
+ 1165          
+ 1166          //             if(cbh(mt9v03x_image[y0][x0],mt9v03x_image[y1][x1]) && (-mt9v03x_image[y0][x0]+mt9v03x_ima
+             -ge[y1][x1])>0)//找黑白跳变点
+ 1167          //             {
+ 1168          //                 seed_left.col = x1;//继承种子
+ 1169          //                 seed_left.row = y1;
+ 1170          //                 L_edge[seed_left.row].col=seed_left.col;
+ 1171          //                 L_edge[seed_left.row].row=seed_left.row;
+ 1172          //                 L_edge[seed_left.row].flag=1;
+ 1173          //                 last_dir_l = p;
+ 1174          //                 break;
+ 1175          //             }
+ 1176          //         }
+ 1177          //         if(seed_left.row<=end_row+1)//突破上限了直接关
+ 1178          //         {
+ 1179          //             break;
+ 1180          //         }
+ 1181          //     }
+ 1182          //    //右线****************************
+ 1183          //     for(c_r = middle_col; c_r<=eight_right_edge ;c_r++)//找右侧种子
+ 1184          //     {
+ 1185          //         if(cbh(mt9v03x_image[start_row][c_r],mt9v03x_image[start_row][c_r+1]) &&(mt9v03x_image[start_r
+             -ow][c_r] - mt9v03x_image[start_row][c_r+1])>0)//找白黑跳变
+ 1186          //         {
+ 1187          //             // 找到右下种子
+ 1188          //             R_edge[start_row].col=c_r;
+ 1189                      
+ 1190          //             R_edge[start_row].row=start_row;
+ 1191          //             R_edge[start_row].flag=1;
+ 1192          //             seed_right.col=c_r;    
+ 1193          //             seed_right.row=start_row;
+ 1194          //             right_seed_flag=1;
+ 1195          //             break;
+ 1196          //         }
+ 1197          //     }//找不到
+ 1198          //     if(right_seed_flag==0)
+ 1199          //     {
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 20  
+
+ 1200          //         seed_right.col=eight_right_edge;
+ 1201          //         seed_right.row=start_row;//设置种子边界
+ 1202          //         R_edge[start_row].row =start_row;
+ 1203          //         R_edge[start_row].col =eight_right_edge;
+ 1204          //         R_edge[start_row].flag=0;
+ 1205          //     }
+ 1206          //     while(cnt_r--)//右线：用自己的步数
+ 1207          //     {
+ 1208          //         //开局种子可能处于一圈空白的位置，此时列为2，直接往上搜黑白跳变�
+             -��作为种子   往后十字路口拐角左边搜索到边界时，就算能搜到黑白跳变,但也需要往上爬
+ 1209          //         if(seed_right.col >= eight_right_edge)//种子在右边界，往上爬
+ 1210          //         {
+ 1211          //             for(r_r=seed_right.row;r_r>=end_row;r_r--)
+ 1212          //             {
+ 1213          //                 if(cbh(mt9v03x_image[r_r-1][eight_right_edge],mt9v03x_image[r_r][eight_right_edge]) &&
+             - (mt9v03x_image[r_r][eight_right_edge] - mt9v03x_image[r_r-1][eight_right_edge])>0)//从下方爬上去 找白黑跳变�
+             -��
+ 1214          //                 {
+ 1215          //                     R_edge[r_r].col=eight_right_edge;
+ 1216          //                     R_edge[r_r].row=r_r;
+ 1217          //                     R_edge[r_r].flag=0;
+ 1218          //                     //记录边线
+ 1219          //                     seed_right.col= eight_right_edge;
+ 1220          //                     seed_right.row= r_r;
+ 1221          //                     //记录种子
+ 1222          //                     break;
+ 1223          //                 }
+ 1224          //                 R_edge[r_r].col =eight_right_edge;
+ 1225          //                 R_edge[r_r].row =r_r;
+ 1226          //                 R_edge[r_r].flag=0;
+ 1227          //             }
+ 1228          //         }
+ 1229          //         //正经爬线
+ 1230          //         for(k_r=0;k_r<8;k_r++)
+ 1231          //         {
+ 1232          //             int p = (last_dir+k_r)%8;
+ 1233          //             int x0,y0,x1,y1;
+ 1234          //             x0=seed_right.col+R_ver[(p + dirction_R   )% 8 ][0];   
+ 1235          //             y0=seed_right.row+R_ver[(p + dirction_R   )% 8 ][1];
+ 1236          //             x1=seed_right.col+R_ver[(p + dirction_R +1)% 8 ][0];   
+ 1237          //             y1=seed_right.row+R_ver[(p + dirction_R +1)% 8 ][1];
+ 1238          //             if(y1>start_row||y0>start_row || x1>=MT9V03X_W || x0>=MT9V03X_W)continue;
+ 1239          //             if(y1<=end_row||y0<=end_row || x1<=0 || x0<=0)continue;
+ 1240          //             if(cbh(mt9v03x_image[y0][x0],mt9v03x_image[y1][x1]) && (-mt9v03x_image[y0][x0]+mt9v03x_ima
+             -ge[y1][x1])>0)//找黑白跳变点
+ 1241          //             {
+ 1242          //                 seed_right.col = x1;//继承种子
+ 1243          //                 seed_right.row = y1;
+ 1244          //                 R_edge[seed_right.row].col=seed_right.col;
+ 1245          //                 R_edge[seed_right.row].row=seed_right.row;
+ 1246          //                 R_edge[seed_right.row].flag=1;
+ 1247          //                 last_dir = p;
+ 1248          //                 break;
+ 1249          //             }
+ 1250          //         }
+ 1251          //         //提前结束避免空转
+ 1252          //         if(seed_right.row<=end_row+1)//突破上限了直接关
+ 1253          //         {
+ 1254          //             break;
+ 1255          //         }
+ 1256          //     }
+ 1257          //     if(abs(seed_left.col-seed_right.col)<=2&&abs(seed_left.row-seed_right.row)<=2)return;//防止串�
+             -�
+ 1258          // }
+
+
+C251 COMPILER V5.60.0,  vision                                                             20/11/26  22:13:51  PAGE 21  
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =    ------     ------
+  ecode size           =     10314     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =      2746     ------
+  xdata-const size     =    ------     ------
+  edata size           =    ------     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =        63     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)

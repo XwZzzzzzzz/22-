@@ -1,0 +1,9 @@
+Build target 'stc32g144k246'
+compiling vision.c...
+..\user\vision.c(138): warning C47: 'saojiaohang': unreferenced local variable
+..\user\vision.c(464): warning C47: 'type': unreferenced parameter
+linking...
+Program Size: data=8.6 edata+hdata=8204 xdata=64253 const=15681 code=152909
+creating hex file from ".\out_file\SEEKFREE"...
+".\out_file\SEEKFREE" - 0 Error(s), 2 Warning(s).
+Build Time Elapsed:  00:00:01

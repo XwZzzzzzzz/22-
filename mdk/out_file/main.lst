@@ -1,0 +1,382 @@
+C251 COMPILER V5.60.0,  main                                                               20/11/26  22:13:50  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE main
+OBJECT MODULE PLACED IN .\out_file\main.obj
+COMPILER INVOKED BY: D:\Keil_v5\C251\BIN\C251.EXE ..\user\main.c LARGE ROM(HUGE) WARNINGLEVEL(3) OPTIMIZE(0,SIZE) BROWSE
+                    - INCDIR(..\libraries\zf_common;..\libraries\zf_components;..\libraries\zf_device;..\libraries\zf_driver;..\user;..\code;
+                    -..\libraries\zf_components\stc32g_usb_lib;..\libraries\zf_components\seekfree_assistant) DEBUG PRINT(.\out_file\main.lst
+                    -) TABS(2) OBJECT(.\out_file\main.obj) 
+
+stmt  level    source
+
+    1          #include "zf_common_headfile.h"
+    2          // #include "bluetooth_serial.h"
+    3          #include <string.h>
+    4          #include "PID.h"
+    5          #include "math.h"
+    6          #include "vision.h"
+    7          #include "zf_device_wifi_uart.h"
+    8          #include "encoder.h"
+    9          #include "my_init.h"
+   10          /*
+   11                  _ooOoo_
+   12                 o8888888o
+   13                 88" . "88
+   14                 (| -_- |)
+   15                 O\  =  /O
+   16              ____/`---'\____
+   17            .'  \\|     |//  `.
+   18           /  \\|||  :  |||//  \
+   19          |  _|  \\\\  -  /  _| |
+   20          | | |  \\     /| | |  |
+   21          | |_|   `-`-'   | |_| |
+   22          |  | `-\/`-----'/` |  |
+   23          \\  \ `-.____.-`/  //
+   24           `__`. `--`--' .'__`
+   25             `---`-_____-`---`
+   26          ·ð×æ±£ÓÓ    ÓÀÎÞBUG
+   27          */
+   28          /*
+   29              tft180 160*128
+   30              mt9v03x 188*120 
+   31              -------------------------------> x / col
+   32              |
+   33              |               
+   34              |
+   35              |
+   36              |
+   37              V
+   38              y / row
+   39          */
+   40          
+   41          // cbh_mindiff=20;//ÐèÒªµ÷Õû
+   42          
+   43          /* ===========================¶æ»ú===============================
+   44           *     Òý½Å   PWME_CH2P_PA2
+   45           *     ÆµÂÊ   200Hz
+   46           *     ÖÐÖµ   2895
+   47           *     ·¶Î§   2580 ~ 3220
+   48           * ============================================================== */
+   49          #define SERVO_PWM           (PWME_CH2P_PA2)     /* ÇøÈü·½°¸¾ÍÊÇ PA2£¬±ð¸Ä³É PA0 */
+   50          #define SERVO_FREQ          (200)
+   51          #define PwmServoMid         (2895)              /* ÖÐÖµ */
+   52          #define PwmServoMin         (2580)              /* ×ó´òËÀ */
+   53          #define PwmServoMax         (3220)              /* ÓÒ´òËÀ */
+   54          #define K 1   //    W/2L  W : ÂÖ¾à L ³µ³¤ 
+   55          /* ---------- Êä³ö£ºoffset ÊÇÏà¶ÔÖÐÖµµÄÆ«ÒÆ£¬×Ô¶¯ÏÞ·ù ----------
+   56           * ×ªÏò»·µÄÊä³öÖ±½ÓÍùÕâÀïÈû£¬³¬¹ý 2580~3220 »á±»¿³µô£¬¶¥²»µ½»úÐµÏÞÎ»
+C251 COMPILER V5.60.0,  main                                                               20/11/26  22:13:50  PAGE 2   
+
+   57           * -------------------------------------------------------------- */
+   58          const float my_rad_table[46] = {
+   59              0.00, 0.02, 0.03, 0.05, 0.07, 0.09, 0.11, 0.12, 0.14, 0.16,   // 0¡ã-9¡ã
+   60              0.18, 0.19, 0.21, 0.23, 0.25, 0.27, 0.29, 0.31, 0.32, 0.34,   // 10¡ã-19¡ã
+   61              0.36, 0.38, 0.40, 0.42, 0.45, 0.47, 0.49, 0.51, 0.53, 0.55,   // 20¡ã-29¡ã
+   62              0.58, 0.60, 0.62, 0.65, 0.67, 0.70, 0.73, 0.75, 0.78, 0.81,   // 30¡ã-39¡ã
+   63              0.84, 0.87, 0.90, 0.93, 0.97, 1.00                            // 40¡ã-45¡ã
+   64          };
+   65          
+   66          
+   67          #define SERVO_SET(offset)   do {                                             \
+   68                  float servo_out_ = (float)PwmServoMid + (float)(offset);             \
+   69                  if(servo_out_ > (float)PwmServoMax) servo_out_ = (float)PwmServoMax; \
+   70                  if(servo_out_ < (float)PwmServoMin) servo_out_ = (float)PwmServoMin; \
+   71                  pwm_set_duty(SERVO_PWM, (uint32)servo_out_);                         \
+   72              } while(0)
+   73          
+   74          void track_scan_zbh_zuichangbailie(void);
+   75          void turn_speed_pid_init (void);
+   76          void turn_pid_controll(void);
+   77          void advanced_regression (int type, int startline1, int endline1, int startline2, int endline2);
+*** WARNING C57 IN LINE 77 OF ..\user\main.c: parameter 1: different from declaration
+   78          int8 find_shizi(void);
+   79          void pit_handler(void);
+   80          void display_point();
+   81          uint8 stop_flag = 0;
+   82          int16 encoder_data_dir_1 = 0;
+   83          int16 encoder_data_dir_2 = 0;
+   84          uint8 boxin_cnt=0;
+   85          uint8 boxin_flag=0;//Ê¾²¨Æ÷
+   86          uint8 tiaocan_cnt=0;
+   87          uint8 tiaocan_flag=0;  
+   88          int32 cnt;
+   89          
+   90          int x1;
+   91          int x2;
+   92          int x3;
+   93          int angle_row_speed     =   50;
+   94          int speed_base          =   65;
+   95          int speed_dif_akerman   =   0; 
+   96          int speed_sum           =   0;
+   97          float speed_ketiao      =   35.0f;
+   98          int ezh_yuzhi;
+   99          int word_display_cnt=0;
+  100          //#define PIT_PRIORITY                    (TIM1_IRQn)               TIM1µÄÖÐ¶ÏÓÅÏÈ¼¶Ä¬ÈÏ×îµÍ£¬²»¿ÉÐÞ¸Ä£¬¾
+             -ßÌå¿´ÊÖ²á¡£
+  101          // ------------------------µ÷ÊÔ½Ó¿Ú-----------------------
+  102          #define use_wifi_spi            1
+  103          #define use_wifi_uart           0
+  104          #define use_speed_decision      0
+  105          #define use_display             0
+  106          //-------------------------µ÷ÊÔ½Ó¿Ú-----------------------
+  107          // void TIM7_boxin_handler(void);
+  108          void main(void)
+  109          {
+  110   1          clock_init(SYSTEM_CLOCK_96M);         //<Îñ±Ø±£Áô>
+  111   1          debug_init();// µ÷ÊÔ´®¿ÚÐÅÏ¢³õÊ¼»¯
+  112   1          pwm_init(SERVO_PWM, SERVO_FREQ, PwmServoMid);
+  113   1          motor_init(); 
+  114   1          my_mt9_init();
+  115   1          my_ips_init();  
+  116   1          if(1== use_wifi_uart)
+  117   1          {        
+  118   2              seekfree_assistant_init();
+  119   2              my_wifi_uart_init();  // wifi ´®¿Ú
+  120   2              seekfree_assistant_interface_init(SEEKFREE_ASSISTANT_WIFI_UART);
+C251 COMPILER V5.60.0,  main                                                               20/11/26  22:13:50  PAGE 3   
+
+  121   2          }
+  122   1          //ÏÈ³õÊ¼»¯ÆÁÄ»ÔÙ³õÊ¼»¯wifi spi,·ñÔò½âÎö²»ÁË
+  123   1      
+  124   1          else if(1 == use_wifi_spi)
+  125   1          {
+  126   2              seekfree_assistant_init();
+  127   2              my_wifi_spi_init(); // wifi spi µ÷ÊÔ
+  128   2              seekfree_assistant_interface_init(SEEKFREE_ASSISTANT_WIFI_SPI);
+  129   2          }
+  130   1          
+  131   1          turn_speed_pid_init();
+  132   1          encoder_init();
+  133   1          pit_ms_init(TIM4_PIT,   5   ,   turn_pid_controll);
+  134   1          // pit_ms_init(TIM7_PIT,   5   ,   TIM7_boxin_handler);                //²¨ÐÎÖÐ¶Ï
+  135   1          pit_ms_init(PIT_CH  ,   5   ,   pit_handler);                      // ËÙ¶È»·ÖÐ¶Ï
+  136   1          while(1)
+  137   1          {
+  138   2              int r;
+  139   2              if(use_wifi_spi ==1 || use_wifi_uart == 1)
+  140   2              {
+  141   3                  if(tiaocan_flag)
+  142   3                  {
+  143   4                      tiaocan_flag=0; 
+  144   4                      seekfree_assistant_data_analysis();
+  145   4                      turn_pid.kp =seekfree_assistant_parameter[0];//µ÷ËÙ¶È»·
+  146   4                      turn_pid.kd =seekfree_assistant_parameter[1];
+  147   4                      speed_base  =seekfree_assistant_parameter[2];
+  148   4                      angle_row   =seekfree_assistant_parameter[3];
+  149   4                      // seekfree_assistant_oscilloscope_data.dat[1] = turn_pid.actual;
+  150   4                      // seekfree_assistant_oscilloscope_data.channel_num = 2;
+  151   4                      // seekfree_assistant_oscilloscope_send(&seekfree_assistant_oscilloscope_data);
+  152   4                      // angle_row=seekfree_assistant_parameter[2];
+  153   4                      // turn_pid.kd=seekfree_assistant_parameter[2];
+  154   4                      // speed_pid1.target=seekfree_assistant_parameter[3];//µ÷Ä¿±êÖµ  //µ÷ËÙ¶È»·
+  155   4                      // turn_pid.kp=seekfree_assistant_parameter[0];
+  156   4                      // turn_pid.ki=seekfree_assistant_parameter[1];
+  157   4                      // turn_pid.kd=seekfree_assistant_parameter[2];
+  158   4                  }
+  159   3              }
+  160   2               if(mt9v03x_finish_flag) 
+  161   2               {            
+  162   3                   int zhongxian_controll1=94; //½ü´¦´ò½Ç
+  163   3                   cnt++;
+  164   3                   // tft180_displayimage03x((const uint8 *)mt9v03x_image, 160, 128);   //ÉãÏñÍ· 188 * 120
+  165   3                   // ips200_show_gray_image(0, 0, mt9v03x_image[0], MT9V03X_W, MT9V03X_H, 141, 90 , 120);
+  166   3      
+  167   3                   if(1==use_display)
+  168   3                   {
+  169   4                       ips200_displayimage03x(mt9v03x_image[0], 141, 90 );
+  170   4                       // ips200_show_gray_image(0, 0, (mt9v03x_image[0]), MT9V03X_W, MT9V03X_H, (141), (90), o
+             -tsu);
+  171   4                   }
+  172   3                   find_edge();
+  173   3                   shizi_zhaodian();
+  174   3                   middle_line_update();
+  175   3                   display_point();  
+  176   3      
+  177   3                   if(middle_line[angle_row].flag!=wait)
+  178   3                  zhongxian_controll1=(middle_line[angle_row].col+middle_line[angle_row-1].col+middle_line[angle_row+
+             -1].col)/3   ;
+  179   3                   else {
+  180   4                       for(r=angle_row;r<=angle_row+30 ; r++)
+  181   4                       {
+  182   5                           if(middle_line[r].flag!=wait)
+  183   5                           {
+  184   6                               r++;//·ÀÖ¹±ß½çÎóÅÐ
+C251 COMPILER V5.60.0,  main                                                               20/11/26  22:13:50  PAGE 4   
+
+  185   6                               zhongxian_controll1 =(middle_line[r].col+middle_line[r-1].col+middle_line[r+1].c
+             -ol)/3;
+  186   6                               break;
+  187   6                           }
+  188   5                       }
+  189   4                     }
+  190   3                   if(mt9v03x_image[start_row-10][94]<otsu )//·À¶ªÏß
+  191   3                   {
+  192   4                       turn_pid.actual=turn_pid.actual1;//ºÚ
+  193   4                   }
+  194   3                   else
+  195   3                   {
+  196   4                       turn_pid.actual = (zhongxian_controll1);//ÐèÒªµ÷Õû
+  197   4                   }
+  198   3                   //°¢¿ËÂü²îËÙ
+  199   3                   //¼ÓÒ»¸öÇ°À¡£¬Ê¹ÓÃ½Ç¼ÓËÙ¶È
+  200   3                   turn_pid_update(&turn_pid);
+  201   3                   
+  202   3                   SERVO_SET(turn_pid.out);
+  203   3                   judge_stop();
+*** WARNING C140 IN LINE 203 OF ..\user\main.c: 'judge_stop' undefined; assuming 'extern int judge_stop()'
+  204   3                   mt9v03x_finish_flag = 0 ;
+  205   3               }
+  206   2          }
+  207   1      }
+  208          
+  209          void display_point()
+  210          {
+  211   1          int r;
+  212   1          int c;
+  213   1          if(1==use_display)
+  214   1          {
+  215   2              for(r = start_row; r >= end_row ; r--)
+  216   2              {
+  217   3                  ips200_draw_point(L_edge[r].col *3/4, r *3/4, RGB565_RED);
+  218   3                  ips200_draw_point(R_edge[r].col *3/4, r *3/4, RGB565_RED);
+  219   3      
+  220   3                  if(middle_line[r].flag!=wait) 
+  221   3                  {
+  222   4                   
+  223   4                      ips200_draw_point(middle_line[r].col *3/4, r *3/4, RGB565_YELLOW);
+  224   4                  }
+  225   3              }
+  226   2          }
+  227   1          
+  228   1              // ips200_show_string(0,100,"err");
+  229   1              // ips200_show_int16(50,100,turn_pid.error0);
+  230   1              // ips200_show_string(0,120,"Shi");
+  231   1              // ips200_show_uint8(50,120,shizi_flag);
+  232   1              // ips200_show_string(0,140,"FPS");
+  233   1              if(cnt>1000)
+  234   1              {
+  235   2                  ips200_show_int32(50,140,cnt,5);
+  236   2                  cnt=0;
+  237   2              }
+  238   1      
+  239   1          // ips200_show_int8(60, 120, R_edge[60].flag);
+  240   1      
+  241   1      
+  242   1      }
+*** WARNING C47 IN LINE 212 OF ..\user\main.c: 'c': unreferenced local variable
+  243          void turn_pid_controll(void)
+  244          { 
+  245   1          
+  246   1          tiaocan_cnt++; /* 5ms x4 = 20ms È¡Ò»´Îµ÷²Î°ü */
+  247   1          if(tiaocan_cnt>=10)
+C251 COMPILER V5.60.0,  main                                                               20/11/26  22:13:50  PAGE 5   
+
+  248   1          {
+  249   2              tiaocan_flag=1;
+  250   2              tiaocan_cnt=0;
+  251   2          }
+  252   1      }
+  253          
+  254          void pit_handler (void)
+  255          {
+  256   1          float speed_decision_input;
+  257   1          int zhongxian_controll2;//Ô¶´¦ËÙ¶È¾ö²ß
+  258   1       
+  259   1        
+  260   1          // if(use_wifi_spi ==1 || use_wifi_uart == 1)
+  261   1          // {
+  262   1          //     seekfree_assistant_oscilloscope_data.dat[0] = speed_pid2.actual;
+  263   1          //     seekfree_assistant_oscilloscope_data.dat[1] = speed_pid2.target;
+  264   1          //     seekfree_assistant_oscilloscope_data.channel_num = 2;
+  265   1          //     seekfree_assistant_oscilloscope_send(&seekfree_assistant_oscilloscope_data);
+  266   1          // }
+  267   1          //¿´ËÙ¶È²¨ÐÎ
+  268   1          speed_sum = speed_base ; //²»Ê¹ÓÃËÙ¶È¾ö²ßµÄÊ±ºòÒ²ÄÜÒÔ»ù´¡ËÙ¶ÈÇ°½ø
+  269   1          if( 1 == use_speed_decision)
+  270   1          {
+  271   2              if(middle_line[angle_row_speed].flag )
+  272   2              {
+  273   3                  zhongxian_controll2 =(middle_line[angle_row_speed-1].col+middle_line[angle_row_speed].col+mid
+             -dle_line[angle_row_speed+1].col)/3;
+  274   3                  //ËÙ¶È¾ö²ß
+  275   3                  speed_decision_input= zhongxian_controll2-94 >0 ? ( zhongxian_controll2 - 94) : -(zhongxian_c
+             -ontroll2-94);
+  276   3                  if(speed_decision_input > 50 )speed_decision_input =50;
+  277   3                  speed_decision_input /= 50.0f; // Æ«×ªÏµÊý 1-k = ³å´ÌÏµÊý
+  278   3                  speed_decision_input=1 - speed_decision_input;
+  279   3                  speed_sum=(float)speed_base + speed_ketiao * speed_decision_input;
+  280   3              }
+  281   2              else 
+  282   2              { 
+  283   3                  speed_sum=speed_base; 
+  284   3              }
+  285   2          }
+  286   1          if(stop_flag)
+  287   1          {
+  288   2              speed_pid1.out = 0.0f;      speed_pid2.out = 0.0f;   /* ÔöÁ¿ÀÛ¼ÓÆ÷±ØÐëÇå */
+  289   2              speed_pid1.error0 = 0.0f;   speed_pid1.error1 = 0.0f;
+  290   2              speed_pid2.error0 = 0.0f;   speed_pid2.error1 = 0.0f;
+  291   2              speed_pid1.target = 0.0f;   speed_pid2.target = 0.0f;
+  292   2              motor1_setspeed(0);
+  293   2              motor2_setspeed(0);
+  294   2              encoder_clear_count(ENCODER_DIR_1);
+  295   2              encoder_clear_count(ENCODER_DIR_2);
+  296   2              return ;
+  297   2          }
+  298   1      
+  299   1          speed_pid1.target = speed_sum;
+  300   1          speed_pid2.target = speed_sum;
+  301   1      
+  302   1      
+  303   1          //ÏÈ¶¨Ä¿±ê
+  304   1          encoder_data_dir_2 = encoder_get_count(ENCODER_DIR_1);                  // »ñÈ¡±àÂëÆ÷¼ÆÊý
+  305   1          encoder_data_dir_1 = encoder_get_count(ENCODER_DIR_2);                  // »ñÈ¡±àÂëÆ÷¼ÆÊý
+  306   1          encoder_clear_count(ENCODER_DIR_1); // Çå¿Õ±àÂëÆ÷¼ÆÊý
+  307   1          encoder_clear_count(ENCODER_DIR_2); // Çå¿Õ±àÂëÆ÷¼ÆÊý
+  308   1          //»ñÈ¡ºóÁ¢ÂíÇå¿Õ
+  309   1      
+  310   1          speed_pid1.actual = (float)encoder_data_dir_1;
+  311   1          speed_pid2.actual = -(float)encoder_data_dir_2;
+C251 COMPILER V5.60.0,  main                                                               20/11/26  22:13:50  PAGE 6   
+
+  312   1          //¿ªÊ¼Ëã£¬Êä³ö
+  313   1          PID_incremental_update(&speed_pid1);
+  314   1          PID_incremental_update(&speed_pid2);
+  315   1      
+  316   1          motor1_setspeed(speed_pid1.out);
+  317   1          motor2_setspeed(speed_pid2.out);
+  318   1      }
+  319          
+  320          void TIM7_boxin_handler(void)
+  321          {
+  322   1              // seekfree_assistant_oscilloscope_data.dat[0] = 0;
+  323   1              // seekfree_assistant_oscilloscope_data.dat[1] = turn_pid.error0;
+  324   1              // seekfree_assistant_oscilloscope_data.channel_num = 2;
+  325   1              // seekfree_assistant_oscilloscope_send(&seekfree_assistant_oscilloscope_data);
+  326   1      }
+*** WARNING C64 IN LINE 68 OF ..\user\main.c: 'fit_valid': static function declared but not defined
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =    ------     ------
+  ecode size           =      2206     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =        51     ------
+  xdata-const size     =    ------     ------
+  edata size           =    ------     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =       274     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  4 WARNING(S),  0 ERROR(S)

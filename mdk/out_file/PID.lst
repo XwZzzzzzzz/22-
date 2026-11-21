@@ -1,0 +1,211 @@
+C251 COMPILER V5.60.0,  PID                                                                20/11/26  22:04:23  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE PID
+OBJECT MODULE PLACED IN .\out_file\PID.obj
+COMPILER INVOKED BY: D:\Keil_v5\C251\BIN\C251.EXE ..\user\PID.c LARGE ROM(HUGE) WARNINGLEVEL(3) OPTIMIZE(0,SIZE) BROWSE 
+                    -INCDIR(..\libraries\zf_common;..\libraries\zf_components;..\libraries\zf_device;..\libraries\zf_driver;..\user;..\code;.
+                    -.\libraries\zf_components\stc32g_usb_lib;..\libraries\zf_components\seekfree_assistant) DEBUG PRINT(.\out_file\PID.lst) 
+                    -TABS(2) OBJECT(.\out_file\PID.obj) 
+
+stmt  level    source
+
+    1          #include "zf_common_headfile.h"
+    2          #include "PID.h"
+    3          
+    4          /**
+    5            * 函    数：PID初始化
+    6            * 参    数：p 指定结构体的地址
+    7            * 返 回 值：无
+    8            */
+    9          void PID_Init(PID_t *p)
+   10          {
+   11   1        /*把PID表示状态的参数清零，避免之前遗留的参数对本次启动造成影响*/
+   12   1        p->target = 0;
+   13   1        p->actual = 0;
+   14   1        p->out = 0;
+   15   1        p->error0 = 0;
+   16   1        p->error1 = 0;
+   17   1        p->errorInt = 0;
+   18   1        p->errorIntMin=0;
+   19   1        p->errorIntMax=0;
+   20   1        p->actual1=0;
+   21   1      }
+   22          
+   23          /**
+   24            * 函    数：PID计算及结构体变量值更新
+   25            * 参    数：p 指定结构体的地址
+   26            * 返 回 值：无
+   27            */
+   28          void PID_Update(PID_t *p)
+   29          {
+   30   1        /*获取本次误差和上次误差*/
+   31   1        p->actual1= p->actual;
+   32   1        p->error1 = p->error0;          //获取上次误差
+   33   1        p->error0 = p->target - p->actual;    //获取本次误差，目标值减实际值，即为误差值
+   34   1        /*外环误差积分（累加）*/
+   35   1        /*如果ki不为0，才进行误差积分，这样做的目的是便于调试*/
+   36   1        /*因为在调试时，我们可能先把ki设置为0，这时积分项无作用，误差消除不了，
+             -误差积分会积累到很大的值*/
+   37   1        /*后续一旦ki不为0，那么因为误差积分已经积累到很大的值了，这就导致积分项
+             -疯狂输出，不利于调试*/
+   38   1        if (p->ki != 0)       //如果ki不为0
+   39   1        {
+   40   2          p->errorInt += p->error0; //进行误差积分
+   41   2        }
+   42   1        else              //否则
+   43   1        {
+   44   2          p->errorInt = 0;      //误差积分直接归0
+   45   2        }                                              
+   46   1        if(p->errorInt>p->errorIntMax)  //积分限幅
+   47   1        {
+   48   2          p->errorInt = p->errorIntMax;
+   49   2        }
+   50   1        else if(p->errorInt<p->errorIntMin) //积分限幅
+   51   1        {
+   52   2          p->errorInt = p->errorIntMin;
+   53   2        }
+   54   1      
+C251 COMPILER V5.60.0,  PID                                                                20/11/26  22:04:23  PAGE 2   
+
+   55   1        /*PID计算*/
+   56   1        /*使用位置式PID公式，计算得到输出值*/
+   57   1        p->out = p->kp * p->error0
+   58   1             + p->ki * p->errorInt
+   59   1             + p->kd * (p->error0 - p->error1);
+   60   1        
+   61   1        /*输出限幅*/
+   62   1        if (p->out > p->outMax) {p->out = p->outMax;} //限制输出值最大为结构体指定的outMax
+   63   1        if (p->out < p->outMin) {p->out = p->outMin;} //限制输出值最小为结构体指定的outMin
+   64   1      }
+   65          /**
+   66            * 函    数：PID计算及结构体变量值更新
+   67            * 参    数：p 指定结构体的地址
+   68            * 返 回 值：无
+   69            */
+   70          void PID_Update_Dt(PID_t *p)
+   71          {
+   72   1        /*获取本次误差和上次误差*/
+   73   1        p->error1 = p->error0;          //获取上次误差
+   74   1        p->error0 = p->target - p->actual;    //获取本次误差，目标值减实际值，即为误差值
+   75   1        /*外环误差积分（累加）*/
+   76   1        /*如果ki不为0，才进行误差积分，这样做的目的是便于调试*/
+   77   1        /*因为在调试时，我们可能先把ki设置为0，这时积分项无作用，误差消除不了，
+             -误差积分会积累到很大的值*/
+   78   1        /*后续一旦ki不为0，那么因为误差积分已经积累到很大的值了，这就导致积分项
+             -疯狂输出，不利于调试*/
+   79   1        if (p->ki != 0)       //如果ki不为0
+   80   1        {
+   81   2          p->errorInt += p->error0; //进行误差积分
+   82   2        }
+   83   1        else              //否则
+   84   1        {
+   85   2          p->errorInt = 0;      //误差积分直接归0
+   86   2        }                                              
+   87   1        if(p->errorInt>p->errorIntMax)  //积分限幅
+   88   1        {
+   89   2          p->errorInt = p->errorIntMax;
+   90   2        }
+   91   1        else if(p->errorInt<p->errorIntMin) //积分限幅
+   92   1        {
+   93   2          p->errorInt = p->errorIntMin;
+   94   2        }
+   95   1      
+   96   1        /*PID计算*/    
+   97   1        /*使用位置式PID公式，计算得到输出值*/
+   98   1        p->out = p->kp * p->error0
+   99   1             + p->ki * p->errorInt
+  100   1             - p->kd * (p->actual - p->actual1    );
+  101   1        
+  102   1        /*输出限幅*/
+  103   1        if (p->out > p->outMax) {p->out = p->outMax;} //限制输出值最大为结构体指定的outMax
+  104   1        if (p->out < p->outMin) {p->out = p->outMin;} //限制输出值最小为结构体指定的outMin
+  105   1        p->actual1 = p->actual;   //本轮计算后进行变量传递，下轮计算时actual1即为上次实际�
+             -��
+  106   1      }
+  107          
+  108          
+  109          void  PID_incremental_update(PID_t *p)// 增量式速度环  PI控制
+  110          {
+  111   1        float du_p;
+  112   1        float du_i;
+  113   1      
+  114   1        p->error1 = p->error0;          //获取上次误差
+  115   1        p->error0 = p->target - p->actual;
+  116   1        du_p = p->kp * (p->error0 - p->error1);
+  117   1        du_i = p->ki * p->error0;
+C251 COMPILER V5.60.0,  PID                                                                20/11/26  22:04:23  PAGE 3   
+
+  118   1        p->out += du_p+du_i;
+  119   1        if (p->out > p->outMax) {p->out = p->outMax;} //限制输出值最大为结构体指定的outMax
+  120   1        if (p->out < p->outMin) {p->out = p->outMin;} //限制输出值最小为结构体指定的outMin
+  121   1      }
+  122          int8 deadzone = 5;
+  123          
+  124          void turn_pid_update(PID_t *p)
+  125          {
+  126   1        /*获取本次误差和上次误差*/
+  127   1        p->actual1= p->actual;
+  128   1        p->error1 = p->error0;          //获取上次误差
+  129   1        p->error0 = p->target - p->actual;    //获取本次误差，目标值减实际值，即为误差值
+  130   1        // if(p->error0<deadzone&&p>0)p->error0 =0 ;
+  131   1        // else if(p->error0<0&&p>-deadzone)p->error0=0;
+  132   1        /*外环误差积分（累加）*/
+  133   1        /*如果ki不为0，才进行误差积分，这样做的目的是便于调试*/
+  134   1        /*因为在调试时，我们可能先把ki设置为0，这时积分项无作用，误差消除不了，
+             -误差积分会积累到很大的值*/
+  135   1        /*后续一旦ki不为0，那么因为误差积分已经积累到很大的值了，这就导致积分项
+             -疯狂输出，不利于调试*/
+  136   1        if (p->ki != 0)       //如果ki不为0
+  137   1        {
+  138   2          p->errorInt += p->error0; //进行误差积分
+  139   2        }
+  140   1        else              //否则
+  141   1        {
+  142   2          p->errorInt = 0;      //误差积分直接归0
+  143   2        }                                              
+  144   1        if(p->errorInt>p->errorIntMax)  //积分限幅
+  145   1        {
+  146   2          p->errorInt = p->errorIntMax;
+  147   2        }
+  148   1        else if(p->errorInt<p->errorIntMin) //积分限幅
+  149   1        {
+  150   2          p->errorInt = p->errorIntMin;
+  151   2        }
+  152   1      
+  153   1        /*PID计算*/
+  154   1        /*使用位置式PID公式，计算得到输出值*/
+  155   1        p->out = p->kp * p->error0
+  156   1             + p->ki * p->errorInt
+  157   1             + p->kd * (p->error0 - p->error1);
+  158   1        
+  159   1        /*输出限幅*/
+  160   1        if (p->out > p->outMax) {p->out = p->outMax;} //限制输出值最大为结构体指定的outMax
+  161   1        if (p->out < p->outMin) {p->out = p->outMin;} //限制输出值最小为结构体指定的outMin
+  162   1      }
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =    ------     ------
+  ecode size           =      3184     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =        29     ------
+  xdata-const size     =    ------     ------
+  edata size           =    ------     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =         6     ------
+C251 COMPILER V5.60.0,  PID                                                                20/11/26  22:04:23  PAGE 4   
+
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,103 @@
+C251 COMPILER V5.60.0,  encoder                                                            20/11/26  22:04:24  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE encoder
+OBJECT MODULE PLACED IN .\out_file\encoder.obj
+COMPILER INVOKED BY: D:\Keil_v5\C251\BIN\C251.EXE ..\user\encoder.c LARGE ROM(HUGE) WARNINGLEVEL(3) OPTIMIZE(0,SIZE) BRO
+                    -WSE INCDIR(..\libraries\zf_common;..\libraries\zf_components;..\libraries\zf_device;..\libraries\zf_driver;..\user;..\co
+                    -de;..\libraries\zf_components\stc32g_usb_lib;..\libraries\zf_components\seekfree_assistant) DEBUG PRINT(.\out_file\encod
+                    -er.lst) TABS(2) OBJECT(.\out_file\encoder.obj) 
+
+stmt  level    source
+
+    1          /********************************************************************************************************
+             -*************
+    2           * 编码器测速模块实现（MG513X 霍尔编码器 · AB 相正交）
+    3           * 平台：STC32G144K246 + 逐飞库 + MDK C251
+    4           * 单位：米每秒（m/s）。speed = ENCODER_SPEED_SCALE × (m/s)
+    5           ********************************************************************************************************
+             -************/
+    6          #include "encoder.h"
+    7          
+    8          /* ================= 编码器接口与引脚（默认主板接线，按实际改） ================= */
+    9          #define ENCODER_QUAD_L        (PWMA_ENCODER)
+   10          #define ENCODER_QUAD_L_CHA    (PWMA_ENCODER_CH1P_P60)
+   11          #define ENCODER_QUAD_L_CHB    (PWMA_ENCODER_CH2P_P62)
+   12          
+   13          #define ENCODER_QUAD_R        (PWMC_ENCODER)
+   14          #define ENCODER_QUAD_R_CHA    (PWMC_ENCODER_CH1P_P40)
+   15          #define ENCODER_QUAD_R_CHB    (PWMC_ENCODER_CH2P_P42)
+   16          
+   17          volatile int16 encoder_delta_left  = 0;
+   18          volatile int16 encoder_delta_right = 0;
+   19          volatile int32 speed_left  = 0;
+   20          volatile int32 speed_right = 0;
+   21          
+   22          /* 每脉冲对应的「放大后速度」：单位 = ENCODER_SPEED_SCALE × (m/s) / 脉冲 */
+   23          static int32 encoder_speed_k = 0;
+   24          
+   25          void encoder_speed_init(void)
+   26          {
+   27   1          /* 1. 初始化两路正交编码器
+   28   1           *    库内部已按 4 倍频配置，且 get_count 里已 >>2 还原成真实脉冲数 */
+   29   1          encoder_quad_init(ENCODER_QUAD_L, ENCODER_QUAD_L_CHA, ENCODER_QUAD_L_CHB);
+   30   1          encoder_quad_init(ENCODER_QUAD_R, ENCODER_QUAD_R_CHA, ENCODER_QUAD_R_CHB);
+   31   1      
+   32   1          /* 2. 计算测速系数 K（只算一次，不进循环）
+   33   1           *
+   34   1           *    D 用米：D_m = D_mm / 1000
+   35   1           *    每脉冲弧长 L = π·D_m / N                              (m/脉冲)
+   36   1           *    每脉冲速度 v = L / (T_ms/1000) = π·D_mm/(N·T_ms)      (m/s)
+   37   1           *    放大 SCALE 倍：  K = π·D_mm·SCALE/(N·T_ms)
+   38   1           *
+   39   1           *    之后运行时只需 speed = Δ × K 一次整数乘法。
+   40   1           *    例：D=65mm, N=390, T=10ms, SCALE=1000 -> K≈52
+   41   1           *        1 m/s 时 Δ≈19，speed=19×52≈988，即 0.988 m/s */
+   42   1          encoder_speed_k = (int32)(3.1415926f * ENCODER_WHEEL_DIA_MM * ENCODER_SPEED_SCALE
+   43   1                                    / ((float)ENCODER_WHEEL_PPR * encoder_period) + 0.5f);
+   44   1      
+   45   1          /* 3. 清掉初始化前的残留计数 */
+   46   1          encoder_clear_count(ENCODER_QUAD_L);
+   47   1          encoder_clear_count(ENCODER_QUAD_R);
+   48   1      }
+   49          
+   50          void encoder_speed_update(void)
+   51          {
+   52   1          /* 读本周期脉冲增量（自上次清零以来的累计值，带符号：正转+ 反转-） */
+   53   1          encoder_delta_left  = encoder_get_count(ENCODER_QUAD_L);
+   54   1          encoder_delta_right = encoder_get_count(ENCODER_QUAD_R);
+C251 COMPILER V5.60.0,  encoder                                                            20/11/26  22:04:24  PAGE 2   
+
+   55   1      
+   56   1          /* 清零，下一周期重新累计 */
+   57   1          encoder_clear_count(ENCODER_QUAD_L);
+   58   1          encoder_clear_count(ENCODER_QUAD_R);
+   59   1      
+   60   1          /* 定点换算：一次整数乘法，无浮点、无除法；单位 m/s × SCALE */
+   61   1          speed_left  = (int32)encoder_delta_left  * encoder_speed_k;
+   62   1          speed_right = (int32)encoder_delta_right * encoder_speed_k;
+   63   1      }
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =    ------     ------
+  ecode size           =       168     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =        16     ------
+  xdata-const size     =    ------     ------
+  edata size           =    ------     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =        41     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

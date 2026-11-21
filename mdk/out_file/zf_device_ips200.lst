@@ -1,0 +1,806 @@
+C251 COMPILER V5.60.0,  zf_device_ips200                                                   16/11/26  15:08:58  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE zf_device_ips200
+OBJECT MODULE PLACED IN .\out_file\zf_device_ips200.obj
+COMPILER INVOKED BY: D:\Keil_v5\C251\BIN\C251.EXE ..\libraries\zf_device\zf_device_ips200.c LARGE ROM(HUGE) WARNINGLEVEL
+                    -(3) OPTIMIZE(0,SIZE) BROWSE INCDIR(..\libraries\zf_common;..\libraries\zf_components;..\libraries\zf_device;..\libraries
+                    -\zf_driver;..\user;..\code;..\libraries\zf_components\stc32g_usb_lib;..\libraries\zf_components\seekfree_assistant) DEBU
+                    -G PRINT(.\out_file\zf_device_ips200.lst) TABS(2) OBJECT(.\out_file\zf_device_ips200.obj) 
+
+stmt  level    source
+
+    1          /********************************************************************************************************
+             -*************
+    2          * ½ÓÏß¶¨Òå£º
+    3          *                   ------------------------------------
+    4          *                   Ä£¿é¹Ü½Å             µ¥Æ¬»ú¹Ü½Å
+    5          *                   SCL                  ²é¿´ zf_device_ips200.h ÖÐ IPS200_SCL_PIN ºê¶¨Òå
+    6          *                   SDA                  ²é¿´ zf_device_ips200.h ÖÐ IPS200_SDA_PIN ºê¶¨Òå
+    7          *                   RST                  ²é¿´ zf_device_ips200.h ÖÐ IPS200_RST_PIN ºê¶¨Òå
+    8          *                   DC                   ²é¿´ zf_device_ips200.h ÖÐ IPS200_DC_PIN  ºê¶¨Òå
+    9          *                   CS                   ²é¿´ zf_device_ips200.h ÖÐ IPS200_CS_PIN  ºê¶¨Òå
+   10          *                   BLK                  ²é¿´ zf_device_ips200.h ÖÐ IPS200_BLK_PIN ºê¶¨Òå
+   11          *                   VCC                 3.3VµçÔ´
+   12          *                   GND                 µçÔ´µØ
+   13          *                   ×î´ó·Ö±æÂÊ 135 * 240
+   14          *                   ------------------------------------
+   15          *********************************************************************************************************
+             -***********/
+   16          #include "zf_common_clock.h"
+   17          #include "zf_common_debug.h"
+   18          #include "zf_common_font.h"
+   19          #include "zf_common_function.h"
+   20          #include "zf_driver_delay.h"
+   21          #include "zf_driver_spi.h"
+   22          
+   23          #include "zf_device_ips200.h"
+   24          
+   25          #define IPS_LEN   240
+   26          #define IPS_WIGHT 320
+   27          
+   28          uint16 ips200_pencolor = IPS200_DEFAULT_PENCOLOR;
+   29          uint16 ips200_bgcolor = IPS200_DEFAULT_BGCOLOR;
+   30          
+   31          ips200_dir_enum ips200_display_dir = IPS200_DEFAULT_DISPLAY_DIR;
+   32          uint16 ips200_x_max = IPS_LEN;
+   33          uint16 ips200_y_max = IPS_WIGHT;
+   34          
+   35          #if (IPS200_USE_INTERFACE==SOFT_SPI) 
+                 static soft_spi_info_struct            ips200_spi;
+                 #define ips200_write_8bit_data(dat)    soft_spi_write_8bit(&ips200_spi, dat)
+                 #define ips200_write_16bit_data(dat)   soft_spi_write_16bit(&ips200_spi, dat)
+               #elif (IPS200_USE_INTERFACE==HARDWARE_SPI)
+   40            #define ips200_write_8bit_data(dat)                  spi_dma_write_8bit(IPS200_SPI, dat)
+   41            #define ips200_write_16bit_data(dat)                 spi_dma_write_16bit(IPS200_SPI, dat)
+   42              #define ips200_write_16bit_data_array(dat, len)      spi_dma_write_16bit_array(IPS200_SPI, dat, len)
+   43          
+   44          #endif
+   45          
+   46          //-------------------------------------------------------------------------------------------------------
+             -------------
+   47          // º¯Êý¼ò½é       Ð´ÃüÁî ÄÚ²¿µ÷ÓÃ
+   48          // @note        ÄÚ²¿µ÷ÓÃ ÓÃ»§ÎÞÐè¹ØÐÄ
+   49          //-------------------------------------------------------------------------------------------------------
+             -------------
+   50          static void ips200_write_index (uint8 dat)
+   51          {
+   52   1          IPS200_CS(1);
+C251 COMPILER V5.60.0,  zf_device_ips200                                                   16/11/26  15:08:58  PAGE 2   
+
+   53   1          IPS200_CS(0);
+   54   1          IPS200_DC(0);
+   55   1          ips200_write_8bit_data(dat);
+   56   1          IPS200_DC(1);
+   57   1          IPS200_CS(1);
+   58   1          IPS200_CS(0);
+   59   1      }
+   60          
+   61          //-------------------------------------------------------------------------------------------------------
+             -------------
+   62          // º¯Êý¼ò½é       ÉèÖÃÏÔÊ¾ÇøÓò ÄÚ²¿µ÷ÓÃ
+   63          // ²ÎÊýËµÃ÷       x1              ÆðÊ¼xÖá×ø±ê
+   64          // ²ÎÊýËµÃ÷       y1              ÆðÊ¼yÖá×ø±ê
+   65          // ²ÎÊýËµÃ÷       x2              ½áÊøxÖá×ø±ê
+   66          // ²ÎÊýËµÃ÷       y2              ½áÊøyÖá×ø±ê
+   67          // ·µ»Ø²ÎÊý      void
+   68          // @note        ÄÚ²¿µ÷ÓÃ ÓÃ»§ÎÞÐè¹ØÐÄ
+   69          //-------------------------------------------------------------------------------------------------------
+             -------------
+   70          static void ips200_set_region (uint16 x1, uint16 y1, uint16 x2, uint16 y2)
+   71          {
+   72   1          zf_assert(x1 < ips200_x_max);
+   73   1          zf_assert(y1 < ips200_y_max);
+   74   1          zf_assert(x2 < ips200_x_max);
+   75   1          zf_assert(y2 < ips200_y_max);
+   76   1      
+   77   1      
+   78   1        ips200_write_index(0x2a);                                               // ÁÐµØÖ·ÉèÖÃ
+   79   1        ips200_write_16bit_data(x1);
+   80   1        ips200_write_16bit_data(x2);
+   81   1        ips200_write_index(0x2b);                                               // ÐÐµØÖ·ÉèÖÃ
+   82   1        ips200_write_16bit_data(y1);
+   83   1        ips200_write_16bit_data(y2);
+   84   1        ips200_write_index(0x2c);                                               // ´¢´æÆ÷Ð´
+   85   1      
+   86   1      }
+   87          
+   88          //-------------------------------------------------------------------------------------------------------
+             -------------
+   89          // º¯Êý¼ò½é       Òº¾§ÇåÆÁº¯Êý
+   90          // ²ÎÊýËµÃ÷       color           ÑÕÉ«¸ñÊ½ RGB565 »òÕß¿ÉÒÔÊ¹ÓÃ zf_common_font.h ÄÚ³£ÓÃÑÕÉ«ºê¶¨Òå
+   91          // ·µ»Ø²ÎÊý      void
+   92          // Ê¹ÓÃÊ¾Àý                ips200_clear(YELLOW);
+   93          //-------------------------------------------------------------------------------------------------------
+             -------------
+   94          void ips200_clear (uint16 color)
+   95          {
+   96   1          uint16 i;
+   97   1          uint16 tmp[IPS_LEN];
+   98   1          ips200_set_region(0, 0, ips200_x_max - 1, ips200_y_max - 1);
+   99   1        
+  100   1          for(i = 0; i < IPS_LEN; i ++)
+  101   1          {
+  102   2              tmp[i] = color;
+  103   2          }
+  104   1      
+  105   1        for(i = 0; i < IPS_WIGHT; i ++)
+  106   1          {
+  107   2              ips200_write_16bit_data_array(tmp, IPS_LEN);
+  108   2          }
+  109   1      
+  110   1      }
+  111          
+  112          //-------------------------------------------------------------------------------------------------------
+             -------------
+  113          // º¯Êý¼ò½é       ÉèÖÃÏÔÊ¾·½Ïò Õâ¸öº¯ÊýÖ»ÓÐÔÚ³õÊ¼»¯ÆÁÄ»Ö®Ç°µ÷ÓÃ²ÅÉúÐ§
+C251 COMPILER V5.60.0,  zf_device_ips200                                                   16/11/26  15:08:58  PAGE 3   
+
+  114          // ²ÎÊýËµÃ÷       dir             ÏÔÊ¾·½Ïò  ²ÎÕÕ zf_device_ips200.h ÄÚ ips200_dir_enum Ã¶¾ÙÌå¶¨Òå
+  115          // ·µ»Ø²ÎÊý       void
+  116          // Ê¹ÓÃÊ¾Àý                ips200_set_dir(IPS200_CROSSWISE);
+  117          //-------------------------------------------------------------------------------------------------------
+             -------------
+  118          void ips200_set_dir (ips200_dir_enum dir)
+  119          {
+  120   1          ips200_display_dir = dir;
+  121   1          
+  122   1          switch(ips200_display_dir)
+  123   1          {
+  124   2              case IPS200_PORTAIT:
+  125   2              case IPS200_PORTAIT_180:
+  126   2              {
+  127   3                  ips200_x_max = IPS_LEN;
+  128   3                  ips200_y_max = IPS_WIGHT;
+  129   3              }break;
+  130   2              case IPS200_CROSSWISE:
+  131   2              case IPS200_CROSSWISE_180:
+  132   2              {
+  133   3                  ips200_x_max = IPS_WIGHT;
+  134   3                  ips200_y_max = IPS_LEN;
+  135   3              }break;
+  136   2          }
+  137   1      }
+  138          
+  139          //-------------------------------------------------------------------------------------------------------
+             -------------
+  140          // º¯Êý¼ò½é       ÉèÖÃÏÔÊ¾ÑÕÉ«
+  141          // ²ÎÊýËµÃ÷       pen             ÑÕÉ«¸ñÊ½ RGB565 »òÕß¿ÉÒÔÊ¹ÓÃ zf_common_font.h ÄÚ³£ÓÃÑÕÉ«ºê¶¨Òå
+  142          // ²ÎÊýËµÃ÷       bgcolor         ÑÕÉ«¸ñÊ½ RGB565 »òÕß¿ÉÒÔÊ¹ÓÃ zf_common_font.h ÄÚ³£ÓÃÑÕÉ«ºê¶¨Òå
+  143          // ·µ»Ø²ÎÊý       void
+  144          // Ê¹ÓÃÊ¾Àý                ips200_set_color(WHITE,BLACK);
+  145          //-------------------------------------------------------------------------------------------------------
+             -------------
+  146          void ips200_set_color (uint16 pen, uint16 bgcolor)
+  147          {
+  148   1          ips200_pencolor = pen;
+  149   1          ips200_bgcolor = bgcolor;
+  150   1      }
+  151          
+  152          //-------------------------------------------------------------------------------------------------------
+             -------------
+  153          // º¯Êý¼ò½é       Òº¾§»­µã
+  154          // ²ÎÊýËµÃ÷       x               ×ø±êx·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_x_max-1]
+  155          // ²ÎÊýËµÃ÷       y               ×ø±êy·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_y_max-1]
+  156          // ²ÎÊýËµÃ÷       dat             ÐèÒªÏÔÊ¾µÄÑÕÉ«
+  157          // ·µ»Ø²ÎÊý       void
+  158          // Ê¹ÓÃÊ¾Àý                ips200_draw_point(0,0,RED);                     // ×ø±ê 0,0 »­Ò»¸öºìÉ«µÄµã
+  159          //-------------------------------------------------------------------------------------------------------
+             -------------
+  160          void ips200_draw_point (uint16 x,uint16 y,uint16 color)
+  161          {
+  162   1          zf_assert(x < ips200_x_max);
+  163   1          zf_assert(y < ips200_y_max);
+  164   1      
+  165   1          ips200_set_region(x,y,x,y);
+  166   1          ips200_write_16bit_data(color);
+  167   1      }
+  168          
+  169          //-------------------------------------------------------------------------------------------------------
+             -------------
+  170          // º¯Êý¼ò½é       Òº¾§ÏÔÊ¾×Ö·û
+  171          // ²ÎÊýËµÃ÷       x               ×ø±êx·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_x_max-1]
+  172          // ²ÎÊýËµÃ÷       y               ×ø±êy·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_y_max-1]
+  173          // ²ÎÊýËµÃ÷       dat             ÐèÒªÏÔÊ¾µÄ×Ö·û
+C251 COMPILER V5.60.0,  zf_device_ips200                                                   16/11/26  15:08:58  PAGE 4   
+
+  174          // ·µ»Ø²ÎÊý       void
+  175          // Ê¹ÓÃÊ¾Àý                ips200_show_char(0,0,'x');                      // ×ø±ê 0,0 Ð´Ò»¸ö×Ö·û x
+  176          //-------------------------------------------------------------------------------------------------------
+             -------------
+  177          void ips200_show_char (uint16 x,uint16 y,const char dat)
+  178          {
+  179   1        uint8 i,j;
+  180   1          uint8 temp;
+  181   1        
+  182   1          zf_assert(x < ips200_x_max);
+  183   1          zf_assert(y < ips200_y_max);
+  184   1      
+  185   1          for(i=0; i<16; i++)
+  186   1          {
+  187   2              ips200_set_region(x,y+i,x+7,y+i);
+  188   2              temp = ascii_font_8x16[dat-32][i];                                            //¼õ 32 ÒòÎªÊÇÈ¡Ä£Ê
+             -Ç´Ó¿Õ¸ñ¿ªÊ¼È¡µÃ ¿Õ¸ñÔÚ ascii ÖÐÐòºÅÊÇ 32
+  189   2              for(j=0; j<8; j++)
+  190   2              {
+  191   3                  if(temp&0x01)   
+  192   3                      ips200_write_16bit_data(ips200_pencolor);
+  193   3                  else
+  194   3                      ips200_write_16bit_data(ips200_bgcolor);
+  195   3                  temp>>=1;
+  196   3              }
+  197   2          }
+  198   1      }
+  199          
+  200          //-------------------------------------------------------------------------------------------------------
+             -------------
+  201          // º¯Êý¼ò½é       Òº¾§ÏÔÊ¾×Ö·û´®
+  202          // ²ÎÊýËµÃ÷       x               ×ø±êx·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_x_max-1]
+  203          // ²ÎÊýËµÃ÷       y               ×ø±êy·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_y_max-1]
+  204          // ²ÎÊýËµÃ÷       dat             ÐèÒªÏÔÊ¾µÄ×Ö·û´®
+  205          // ·µ»Ø²ÎÊý       void
+  206          // Ê¹ÓÃÊ¾Àý                ips200_show_string(0,0,"seekfree");
+  207          //-------------------------------------------------------------------------------------------------------
+             -------------
+  208          void ips200_show_string (uint16 x,uint16 y,const char dat[])
+  209          {
+  210   1        uint16 j = 0;
+  211   1        
+  212   1          zf_assert(x < ips200_x_max);
+  213   1          zf_assert(y < ips200_y_max);
+  214   1      
+  215   1          while(dat[j] != '\0')
+  216   1          {
+  217   2              ips200_show_char(x+8*j,y,dat[j]);
+  218   2              j++;
+  219   2          }
+  220   1      }
+  221          
+  222          //-------------------------------------------------------------------------------------------------------
+             -------------
+  223          //  @brief      Òº¾§ÏÔÊ¾8Î»ÓÐ·ûºÅ
+  224          // ²ÎÊýËµÃ÷       x               ×ø±êx·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_x_max-1]
+  225          // ²ÎÊýËµÃ÷       y               ×ø±êy·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_y_max-1]
+  226          //  @param       dat             ÐèÒªÏÔÊ¾µÄ±äÁ¿£¬Êý¾ÝÀàÐÍint8
+  227          //  @return      void
+  228          //  Sample usage:               ips200_show_int8(0,0,x);                        // xÎª int8 ÀàÐÍ
+  229          //-------------------------------------------------------------------------------------------------------
+             -------------
+  230          void ips200_show_int8(uint16 x,uint16 y,int8 dat)
+  231          {
+  232   1        uint8 a[3];
+  233   1          uint8 i;
+C251 COMPILER V5.60.0,  zf_device_ips200                                                   16/11/26  15:08:58  PAGE 5   
+
+  234   1        
+  235   1          zf_assert(x < ips200_x_max);
+  236   1          zf_assert(y < ips200_y_max);
+  237   1      
+  238   1          if(dat<0)
+  239   1          {
+  240   2              ips200_show_char(x,y,'-');
+  241   2              dat = -dat;
+  242   2          }
+  243   1          else
+  244   1              ips200_show_char(x,y,' ');
+  245   1          
+  246   1          a[0] = dat/100;
+  247   1          a[1] = dat/10%10;
+  248   1          a[2] = dat%10;
+  249   1          i = 0;
+  250   1          while(i<3)
+  251   1          {
+  252   2              ips200_show_char(x+(8*(i+1)),y,(uint8)('0' + a[i]));
+  253   2              i++;
+  254   2          }
+  255   1      }
+  256          
+  257          //-------------------------------------------------------------------------------------------------------
+             -------------
+  258          // º¯Êý¼ò½é       Òº¾§ÏÔÊ¾8Î»ÎÞ·ûºÅ
+  259          // ²ÎÊýËµÃ÷       x               ×ø±êx·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_x_max-1]
+  260          // ²ÎÊýËµÃ÷       y               ×ø±êy·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_y_max-1]
+  261          // ²ÎÊýËµÃ÷       dat             ÐèÒªÏÔÊ¾µÄ±äÁ¿ Êý¾ÝÀàÐÍuint8
+  262          // ·µ»Ø²ÎÊý       void
+  263          // Ê¹ÓÃÊ¾Àý                ips200_show_uint8(0,0,x);                       // x Îª uint8 ÀàÐÍ
+  264          //-------------------------------------------------------------------------------------------------------
+             -------------
+  265          void ips200_show_uint8(uint16 x,uint16 y,uint8 dat)
+  266          {
+  267   1        
+  268   1          uint8 a[3];
+  269   1          uint8 i;
+  270   1        
+  271   1          zf_assert(x < ips200_x_max);
+  272   1          zf_assert(y < ips200_y_max);
+  273   1      
+  274   1          a[0] = dat/100;
+  275   1          a[1] = dat/10%10;
+  276   1          a[2] = dat%10;
+  277   1          i = 0;
+  278   1          while(i<3)
+  279   1          {
+  280   2              ips200_show_char(x+(8*i),y,(uint8)('0' + a[i]));
+  281   2              i++;
+  282   2          }
+  283   1          
+  284   1      }
+  285          
+  286          //-------------------------------------------------------------------------------------------------------
+             -------------
+  287          // º¯Êý¼ò½é       Òº¾§ÏÔÊ¾16Î»ÓÐ·ûºÅ
+  288          // ²ÎÊýËµÃ÷       x               ×ø±êx·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_x_max-1]
+  289          // ²ÎÊýËµÃ÷       y               ×ø±êy·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_y_max-1]
+  290          // ²ÎÊýËµÃ÷       dat             ÐèÒªÏÔÊ¾µÄ±äÁ¿ Êý¾ÝÀàÐÍint16
+  291          // ·µ»Ø²ÎÊý       void
+  292          // Ê¹ÓÃÊ¾Àý                ips200_show_int16(0,0,x);                       // x Îª int16 ÀàÐÍ
+  293          //-------------------------------------------------------------------------------------------------------
+             -------------
+  294          void ips200_show_int16(uint16 x,uint16 y,int16 dat)
+  295          {
+C251 COMPILER V5.60.0,  zf_device_ips200                                                   16/11/26  15:08:58  PAGE 6   
+
+  296   1        uint8 a[5];
+  297   1          uint8 i;
+  298   1      
+  299   1          zf_assert(x < ips200_x_max);
+  300   1          zf_assert(y < ips200_y_max);
+  301   1      
+  302   1          if(dat<0)
+  303   1          {
+  304   2              ips200_show_char(x,y,'-');
+  305   2              dat = -dat;
+  306   2          }
+  307   1          else    ips200_show_char(x,y,' ');
+  308   1      
+  309   1          a[0] = dat/10000;
+  310   1          a[1] = dat/1000%10;
+  311   1          a[2] = dat/100%10;
+  312   1          a[3] = dat/10%10;
+  313   1          a[4] = dat%10;
+  314   1          
+  315   1          i = 0;
+  316   1          while(i<5)
+  317   1          {
+  318   2              ips200_show_char(x+(8*(i+1)),y,(uint8)('0' + a[i]));
+  319   2              i++;
+  320   2          }
+  321   1      }
+  322          
+  323          //-------------------------------------------------------------------------------------------------------
+             -------------
+  324          // º¯Êý¼ò½é       Òº¾§ÏÔÊ¾16Î»ÎÞ·ûºÅ
+  325          // ²ÎÊýËµÃ÷       x               ×ø±êx·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_x_max-1]
+  326          // ²ÎÊýËµÃ÷       y               ×ø±êy·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_y_max-1]
+  327          // ²ÎÊýËµÃ÷       dat             ÐèÒªÏÔÊ¾µÄ±äÁ¿£¬Êý¾ÝÀàÐÍuint16
+  328          // ·µ»Ø²ÎÊý       void
+  329          // Ê¹ÓÃÊ¾Àý                ips200_show_uint16(0,0,x);                      // x Îª uint16 ÀàÐÍ
+  330          //-------------------------------------------------------------------------------------------------------
+             -------------
+  331          void ips200_show_uint16(uint16 x,uint16 y,uint16 dat)
+  332          {
+  333   1          uint8 a[5];
+  334   1          uint8 i;
+  335   1        
+  336   1          zf_assert(x < ips200_x_max);
+  337   1          zf_assert(y < ips200_y_max);
+  338   1        
+  339   1          a[0] = dat/10000;
+  340   1          a[1] = dat/1000%10;
+  341   1          a[2] = dat/100%10;
+  342   1          a[3] = dat/10%10;
+  343   1          a[4] = dat%10;
+  344   1          
+  345   1          i = 0;
+  346   1          while(i<5)
+  347   1          {
+  348   2              ips200_show_char(x+(8*i),y,(uint8)('0' + a[i]));
+  349   2              i++;
+  350   2          }
+  351   1      }
+  352          
+  353          //-------------------------------------------------------------------------------------------------------
+             -------------
+  354          // º¯Êý¼ò½é       Òº¾§ÏÔÊ¾32Î»ÓÐ·ûºÅ(È¥³ýÕûÊý²¿·ÖÎÞÐ§µÄ0)
+  355          // ²ÎÊýËµÃ÷       x               ×ø±êx·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_x_max-1]
+  356          // ²ÎÊýËµÃ÷       y               ×ø±êy·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_y_max-1]
+  357          // ²ÎÊýËµÃ÷       dat             ÐèÒªÏÔÊ¾µÄ±äÁ¿£¬Êý¾ÝÀàÐÍuint32
+  358          // ²ÎÊýËµÃ÷       num             ÐèÒªÏÔÊ¾µÄÎ»Êý ×î¸ß10Î»  ²»°üº¬Õý¸ººÅ
+C251 COMPILER V5.60.0,  zf_device_ips200                                                   16/11/26  15:08:58  PAGE 7   
+
+  359          // ·µ»Ø²ÎÊý       void
+  360          // Ê¹ÓÃÊ¾Àý                ips200_showuint32(0,0,x,3);                     // x ¿ÉÒÔÎª int32 uint16 int16
+             - uint8 int8 ÀàÐÍ
+  361          // note:                        ¸ºÊý»áÏÔÊ¾Ò»¸ö ¡®-¡¯ºÅ   ÕýÊýÏÔÊ¾Ò»¸ö¿Õ¸ñ
+  362          //-------------------------------------------------------------------------------------------------------
+             -------------
+  363          void ips200_show_int32(uint16 x,uint16 y,int32 dat,uint8 num)
+  364          {
+  365   1          int8    buff[34];
+  366   1          uint8   length;
+  367   1        
+  368   1          zf_assert(x < ips200_x_max);
+  369   1          zf_assert(y < ips200_y_max);
+  370   1        
+  371   1          if(10<num)      num = 10;
+  372   1          
+  373   1          num++;
+  374   1          if(0>dat)   length = zf_sprintf( &buff[0],(const int8 *)"%d",dat);        // ¸ºÊý
+  375   1          else
+  376   1          {
+  377   2              buff[0] = ' ';
+  378   2              length = zf_sprintf( &buff[1],(const int8 *)"%d",dat);
+  379   2              length++;
+  380   2          }
+  381   1          while(length < num)
+  382   1          {
+  383   2              buff[length] = ' ';
+  384   2              length++;
+  385   2          }
+  386   1          buff[num] = '\0';
+  387   1      
+  388   1          ips200_show_string(x, y, (const char *)buff);                               // ÏÔÊ¾Êý×Ö
+  389   1      }
+  390          
+  391          //-------------------------------------------------------------------------------------------------------
+             -------------
+  392          // º¯Êý¼ò½é       Òº¾§ÏÔÊ¾¸¡µãÊý(È¥³ýÕûÊý²¿·ÖÎÞÐ§µÄ0)
+  393          // ²ÎÊýËµÃ÷       x               ×ø±êx·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_x_max-1]
+  394          // ²ÎÊýËµÃ÷       y               ×ø±êy·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_y_max-1]
+  395          // ²ÎÊýËµÃ÷       dat             ÐèÒªÏÔÊ¾µÄ±äÁ¿£¬Êý¾ÝÀàÐÍfloat»òdouble
+  396          // ²ÎÊýËµÃ÷       num             ÕûÊýÎ»ÏÔÊ¾³¤¶È   ×î¸ß10Î»
+  397          // ²ÎÊýËµÃ÷       pointnum        Ð¡ÊýÎ»ÏÔÊ¾³¤¶È   ×î¸ß6Î»
+  398          // ·µ»Ø²ÎÊý       void
+  399          // Ê¹ÓÃÊ¾Àý                ips200_showfloat(0,0,x,2,3);                    // ÏÔÊ¾¸¡µãÊý   ÕûÊýÏÔÊ¾2Î»   
+             -Ð¡ÊýÏÔÊ¾ÈýÎ»
+  400          // @note                        ÌØ±ð×¢Òâµ±·¢ÏÖÐ¡Êý²¿·ÖÏÔÊ¾µÄÖµÓëÄãÐ´ÈëµÄÖµ²»Ò»ÑùµÄÊ±ºò£¬
+  401          //                              ¿ÉÄÜÊÇÓÉÓÚ¸¡µãÊý¾«¶È¶ªÊ§ÎÊÌâµ¼ÖÂµÄ£¬Õâ²¢²»ÊÇÏÔÊ¾º¯ÊýµÄÎÊÌâ£¬
+  402          //                              ÓÐ¹ØÎÊÌâµÄÏêÇé£¬Çë×ÔÐÐ°Ù¶ÈÑ§Ï°   ¸¡µãÊý¾«¶È¶ªÊ§ÎÊÌâ¡£
+  403          //                              ¸ºÊý»áÏÔÊ¾Ò»¸ö ¡®-¡¯ºÅ   ÕýÊýÏÔÊ¾Ò»¸ö¿Õ¸ñ
+  404          //-------------------------------------------------------------------------------------------------------
+             -------------
+  405          void ips200_show_float(uint16 x,uint16 y,double dat,uint8 num,uint8 pointnum)
+  406          {
+  407   1          uint8   length;
+  408   1          int8    buff[34];
+  409   1          int8    start,end,point;
+  410   1        
+  411   1          zf_assert(x < ips200_x_max);
+  412   1          zf_assert(y < ips200_y_max);
+  413   1      
+  414   1          if(6<pointnum)  pointnum = 6;
+  415   1          if(10<num)      num = 10;
+  416   1              
+  417   1          if(0>dat)   length = zf_sprintf( &buff[0],(const int8 *)"%f",dat);        // ¸ºÊý
+  418   1          else
+  419   1          {
+C251 COMPILER V5.60.0,  zf_device_ips200                                                   16/11/26  15:08:58  PAGE 8   
+
+  420   2              length = zf_sprintf( &buff[1],(const int8 *)"%f",dat);
+  421   2              length++;
+  422   2          }
+  423   1          point = length - 7;                                                         // ¼ÆËãÐ¡ÊýµãÎ»ÖÃ
+  424   1          start = point - num - 1;                                                    // ¼ÆËãÆðÊ¼Î»
+  425   1          end = point + pointnum + 1;                                                 // ¼ÆËã½áÊøÎ»
+  426   1          while(0>start)                                                              // ÕûÊýÎ»²»¹»  Ä©Î²Ó¦¸ÃÌî
+             -³ä¿Õ¸ñ
+  427   1          {
+  428   2              buff[end] = ' ';
+  429   2              end++;
+  430   2              start++;
+  431   2          }
+  432   1          
+  433   1          if(0>dat)   buff[start] = '-';
+  434   1          else        buff[start] = ' ';
+  435   1          
+  436   1          buff[end] = '\0';
+  437   1      
+  438   1          ips200_show_string(x, y, (const char *)buff);                               // ÏÔÊ¾Êý×Ö
+  439   1      }
+  440          
+  441          
+  442          //-------------------------------------------------------------------------------------------------------
+             -------------
+  443          // º¯Êý¼ò½é       IPS200 ÏÔÊ¾²¨ÐÎ
+  444          // ²ÎÊýËµÃ÷       x               ×ø±êx·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_x_max-1]
+  445          // ²ÎÊýËµÃ÷       y               ×ø±êy·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_y_max-1]
+  446          // ²ÎÊýËµÃ÷       *p              ²¨ÐÎÊý×éÖ¸Õë
+  447          // ²ÎÊýËµÃ÷       width           ²¨ÐÎÊµ¼Ê¿í¶È
+  448          // ²ÎÊýËµÃ÷       value_max       ²¨ÐÎÊµ¼Ê×î´óÖµ
+  449          // ²ÎÊýËµÃ÷       dis_width       ²¨ÐÎÏÔÊ¾¿í¶È ²ÎÊý·¶Î§ [0, ips200_x_max]
+  450          // ²ÎÊýËµÃ÷       dis_value_max   ²¨ÐÎÏÔÊ¾×î´óÖµ ²ÎÊý·¶Î§ [0, ips200_y_max]
+  451          // ·µ»Ø²ÎÊý       void
+  452          // Ê¹ÓÃÊ¾Àý                ips200_show_gray_image(0,0,camera_buffer_addr,MT9V03X_W,MT9V03X_H,240,135,128)
+             -;
+  453          //-------------------------------------------------------------------------------------------------------
+             -------------
+  454          void ips200_show_wave(uint16 x, uint16 y, uint8 *p, uint16 width, uint16 value_max, uint16 dis_width, uin
+             -t16 dis_value_max)
+  455          {
+  456   1          uint32 i = 0, j = 0;
+  457   1          uint32 width_index, value_max_index;
+  458   1        
+  459   1          zf_assert(x < ips200_x_max);
+  460   1          zf_assert(y < ips200_y_max);
+  461   1        
+  462   1          ips200_set_region(x, y, x+dis_width-1, y+dis_value_max-1);                  // ÉèÖÃÏÔÊ¾ÇøÓò
+  463   1          for(i=0;i<dis_value_max;i++)
+  464   1          {
+  465   2              for(j=0;j<dis_width;j++)
+  466   2              {
+  467   3                  ips200_write_16bit_data(ips200_bgcolor); 
+  468   3              }
+  469   2          }
+  470   1      
+  471   1          for(i=0;i<dis_width;i++)
+  472   1          {
+  473   2              width_index = i*width/dis_width;
+  474   2              value_max_index = *(p+width_index)*(dis_value_max-1)/value_max;
+  475   2              ips200_draw_point(i+x, (dis_value_max-1)-value_max_index+y, ips200_pencolor);
+  476   2          }
+  477   1      }
+  478          
+  479          //-------------------------------------------------------------------------------------------------------
+             -------------
+C251 COMPILER V5.60.0,  zf_device_ips200                                                   16/11/26  15:08:58  PAGE 9   
+
+  480          // º¯Êý¼ò½é       ºº×ÖÏÔÊ¾
+  481          // ²ÎÊýËµÃ÷       x               ×ø±êx·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_x_max-1]
+  482          // ²ÎÊýËµÃ÷       y               ×ø±êy·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_y_max-1]
+  483          // ²ÎÊýËµÃ÷       siz            È¡Ä£µÄÊ±ºòÉèÖÃµÄºº×Ö×ÖÌå´óÐ¡ Ò²¾ÍÊÇÒ»¸öºº×ÖÕ¼ÓÃµÄµãÕó³¤¿íÎª¶àÉÙ¸öµã È¡Ä£
+             -µÄÊ±ºòÐèÒª³¤¿íÊÇÒ»ÑùµÄ
+  484          // ²ÎÊýËµÃ÷       *p              ÐèÒªÏÔÊ¾µÄºº×ÖÊý×é
+  485          // ²ÎÊýËµÃ÷       number          ÐèÒªÏÔÊ¾¶àÉÙÎ»
+  486          // ²ÎÊýËµÃ÷       color           ÏÔÊ¾ÑÕÉ«
+  487          // ·µ»Ø²ÎÊý       void
+  488          // Ê¹ÓÃÊ¾Àý                ips200_show_chinese(0,0,16,chinese_test[0],4,RED);//ÏÔÊ¾fontÎÄ¼þÀïÃæµÄ Ê¾Àý
+  489          // ±¸×¢ÐÅÏ¢                        Ê¹ÓÃPCtoLCD2002Èí¼þÈ¡Ä£           ÒõÂë¡¢ÖðÐÐÊ½¡¢Ë³Ïò   16*16
+  490          //-------------------------------------------------------------------------------------------------------
+             -------------
+  491          void ips200_show_chinese (uint16 x, uint16 y, uint8 siz, const uint8 *p, uint8 number, uint16 color)
+  492          {
+  493   1        int i, j, k; 
+  494   1          uint8 temp, temp1, temp2;
+  495   1          const uint8 *p_data;
+  496   1        
+  497   1          zf_assert(x < ips200_x_max);
+  498   1          zf_assert(y < ips200_y_max);
+  499   1      
+  500   1          temp2 = siz/8;
+  501   1          
+  502   1          ips200_set_region(x,y,number*siz-1+x,y+siz-1);
+  503   1          
+  504   1          for(i=0;i<siz;i++)
+  505   1          {
+  506   2              temp1 = number;
+  507   2              p_data = p+i*temp2;
+  508   2              while(temp1--)
+  509   2              {
+  510   3                  for(k=0;k<temp2;k++)
+  511   3                  {
+  512   4                      for(j=8;j>0;j--)
+  513   4                      {
+  514   5                          temp = (*p_data>>(j-1)) & 0x01;
+  515   5                          if(temp)    ips200_write_16bit_data(color);
+  516   5                          else        ips200_write_16bit_data(ips200_bgcolor);
+  517   5                      }
+  518   4                      p_data++;
+  519   4                  }
+  520   3                  p_data = p_data - temp2 + temp2*siz;
+  521   3              }   
+  522   2          }
+  523   1      }
+  524          
+  525          
+  526          //-------------------------------------------------------------------------------------------------------
+             -------------
+  527          // º¯Êý¼ò½é     IPS200 ÏÔÊ¾ 8bit »Ò¶ÈÍ¼Ïñ ´ø¶þÖµ»¯ãÐÖµ
+  528          // ²ÎÊýËµÃ÷     x               ×ø±êx·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_x_max-1]
+  529          // ²ÎÊýËµÃ÷     y               ×ø±êy·½ÏòµÄÆðµã ²ÎÊý·¶Î§ [0, ips200_y_max-1]
+  530          // ²ÎÊýËµÃ÷     *image          Í¼ÏñÊý×éÖ¸Õë
+  531          // ²ÎÊýËµÃ÷     width           Í¼ÏñÊµ¼Ê¿í¶È
+  532          // ²ÎÊýËµÃ÷     height          Í¼ÏñÊµ¼Ê¸ß¶È
+  533          // ²ÎÊýËµÃ÷     dis_width       Í¼ÏñÏÔÊ¾¿í¶È ²ÎÊý·¶Î§ [0, ips200_x_max]
+  534          // ²ÎÊýËµÃ÷     dis_height      Í¼ÏñÏÔÊ¾¸ß¶È ²ÎÊý·¶Î§ [0, ips200_y_max]
+  535          // ²ÎÊýËµÃ÷     threshold       ¶þÖµ»¯ÏÔÊ¾ãÐÖµ 0-²»¿ªÆô¶þÖµ»¯
+  536          // ·µ»Ø²ÎÊý     void
+  537          // Ê¹ÓÃÊ¾Àý     ips200_show_gray_image(0, 0, mt9v03x_image[0], MT9V03X_W, MT9V03X_H, MT9V03X_W, MT9V03X_H
+             -, 0);
+  538          // ±¸×¢ÐÅÏ¢     ÓÃÓÚÏÔÊ¾×Ü×ê·çµÄÍ¼Ïñ
+  539          //              Èç¹ûÒªÏÔÊ¾¶þÖµ»¯Í¼Ïñ Ö±½ÓÐÞ¸Ä×îºóÒ»¸ö²ÎÊýÎªÐèÒªµÄ¶þÖµ»¯ãÐÖµ¼´¿É
+  540          //              Èç¹ûÒªÏÔÊ¾¶þÖµ»¯Í¼Ïñ Ö±½ÓÐÞ¸Ä×îºóÒ»¸ö²ÎÊýÎªÐèÒªµÄ¶þÖµ»¯ãÐÖµ¼´¿É
+  541          //              Èç¹ûÒªÏÔÊ¾¶þÖµ»¯Í¼Ïñ Ö±½ÓÐÞ¸Ä×îºóÒ»¸ö²ÎÊýÎªÐèÒªµÄ¶þÖµ»¯ãÐÖµ¼´¿É
+C251 COMPILER V5.60.0,  zf_device_ips200                                                   16/11/26  15:08:58  PAGE 10  
+
+  542          //-------------------------------------------------------------------------------------------------------
+             -------------
+  543          void ips200_show_gray_image (uint16 x, uint16 y, const uint8 *image, uint16 width, uint16 height, uint16 
+             -dis_width, uint16 dis_height, uint8 threshold)
+  544          {
+  545   1          uint32 i = 0, j = 0;
+  546   1          uint16 color ,temp ;
+  547   1          uint16 data_buffer[IPS_LEN];
+  548   1          const uint8 *image_temp;
+  549   1      
+  550   1          // Èç¹û³ÌÐòÔÚÊä³öÁË¶ÏÑÔÐÅÏ¢ ²¢ÇÒÌáÊ¾³ö´íÎ»ÖÃÔÚÕâÀï
+  551   1          // ÄÇÃ´Ò»°ãÊÇÆÁÄ»ÏÔÊ¾µÄÊ±ºò³¬¹ýÆÁÄ»·Ö±æÂÊ·¶Î§ÁË
+  552   1          zf_assert(x < ips200_x_max);
+  553   1          zf_assert(y < ips200_y_max);
+  554   1          zf_assert(NULL != image);
+  555   1      
+  556   1          IPS200_CS(0);
+  557   1      
+  558   1          ips200_set_region(x, y, x + dis_width - 1, y + dis_height - 1);             // ÉèÖÃÏÔÊ¾ÇøÓò
+  559   1      
+  560   1          for(j = 0; j < dis_height; j ++)
+  561   1          {
+  562   2              image_temp = image + j * height / dis_height * width;                   // Ö±½Ó¶Ô image ²Ù×÷»á Ha
+             -rdfault ÔÝÊ±²»ÖªµÀÎªÊ²Ã´
+  563   2              for(i = 0; i < dis_width; i ++)
+  564   2              {
+  565   3                  temp = *(image_temp + i * width / dis_width);                       // ¶ÁÈ¡ÏñËØµã
+  566   3                  if(threshold == 0)
+  567   3                  {
+  568   4                      color = (0x001f & ((temp) >> 3)) << 11;
+  569   4                      color = color | (((0x003f) & ((temp) >> 2)) << 5);
+  570   4                      color = color | (0x001f & ((temp) >> 3));
+  571   4                      data_buffer[i] = (color);
+  572   4                  }
+  573   3                  else if(temp < threshold)
+  574   3                  {
+  575   4                      data_buffer[i] = (RGB565_BLACK);
+  576   4                  }
+  577   3                  else
+  578   3                  {
+  579   4                      data_buffer[i] = (RGB565_WHITE);
+  580   4                  }
+  581   3              }
+  582   2              ips200_write_16bit_data_array(data_buffer, dis_width);
+  583   2          }
+  584   1      
+  585   1          IPS200_CS(1);
+  586   1      
+  587   1      }
+  588          
+  589          //-------------------------------------------------------------------------------------------------------
+             -------------
+  590          // º¯Êý¼ò½é       1.14´ç IPSÒº¾§³õÊ¼»¯
+  591          // ·µ»Ø²ÎÊý      void
+  592          // Ê¹ÓÃÊ¾Àý                ips200_init();
+  593          //-------------------------------------------------------------------------------------------------------
+             -------------
+  594          void ips200_init (void)
+  595          {
+  596   1      #if (IPS200_USE_INTERFACE==SOFT_SPI)
+                   soft_spi_init(&ips200_spi, SPI_MODE0, IPS200_SOFT_SPI_DELAY, IPS200_SCL_PIN, IPS200_SDA_PIN, SOFT_SPI
+             -_PIN_NULL, SOFT_SPI_PIN_NULL);
+               #elif (IPS200_USE_INTERFACE==HARDWARE_SPI)
+  599   1          spi_dma_init(IPS200_SPI, SPI_MODE0, IPS200_SPI_SPEED, IPS200_SCL_PIN, IPS200_SDA_PIN, SPI_MISO_NULL, 
+             -SPI_CS_NULL);
+  600   1      #endif
+C251 COMPILER V5.60.0,  zf_device_ips200                                                   16/11/26  15:08:58  PAGE 11  
+
+  601   1      
+  602   1          gpio_init(IPS200_DC_PIN, GPO, GPIO_LOW, GPO_PUSH_PULL);
+  603   1          gpio_init(IPS200_RST_PIN, GPO, GPIO_LOW, GPO_PUSH_PULL);
+  604   1          gpio_init(IPS200_CS_PIN, GPO, GPIO_LOW, GPO_PUSH_PULL);
+  605   1          gpio_init(IPS200_BLK_PIN, GPO, GPIO_HIGH, GPO_PUSH_PULL);
+  606   1          // gpio_init(IO_P01, GPO, GPIO_HIGH, GPO_PUSH_PULL);
+  607   1          ips200_set_dir(ips200_display_dir);
+  608   1          ips200_set_color(ips200_pencolor, ips200_bgcolor);
+  609   1      
+  610   1          IPS200_RST(0);
+  611   1          system_delay_ms(200);
+  612   1      
+  613   1          IPS200_RST(1);
+  614   1          system_delay_ms(100);
+  615   1      
+  616   1          ips200_write_index(0x36);
+  617   1          system_delay_ms(100);
+  618   1          if      (ips200_display_dir==0) ips200_write_8bit_data(0x00);
+  619   1          else if (ips200_display_dir==1) ips200_write_8bit_data(0xC0);
+  620   1          else if (ips200_display_dir==2) ips200_write_8bit_data(0x70);
+  621   1          else                            ips200_write_8bit_data(0xA0);
+  622   1      
+  623   1          ips200_write_index(0x3A);
+  624   1          ips200_write_8bit_data(0x05);
+  625   1      
+  626   1          ips200_write_index(0xB2);
+  627   1          ips200_write_8bit_data(0x0C);
+  628   1          ips200_write_8bit_data(0x0C);
+  629   1          ips200_write_8bit_data(0x00);
+  630   1          ips200_write_8bit_data(0x33);
+  631   1          ips200_write_8bit_data(0x33);
+  632   1      
+  633   1          ips200_write_index(0xB7);
+  634   1          ips200_write_8bit_data(0x35);
+  635   1      
+  636   1          ips200_write_index(0xBB);
+  637   1          ips200_write_8bit_data(0x37);
+  638   1      
+  639   1          ips200_write_index(0xC0);
+  640   1          ips200_write_8bit_data(0x2C);
+  641   1      
+  642   1          ips200_write_index(0xC2);
+  643   1          ips200_write_8bit_data(0x01);
+  644   1      
+  645   1          ips200_write_index(0xC3);
+  646   1          ips200_write_8bit_data(0x12);
+  647   1      
+  648   1          ips200_write_index(0xC4);
+  649   1          ips200_write_8bit_data(0x20);
+  650   1      
+  651   1          ips200_write_index(0xC6);
+  652   1          ips200_write_8bit_data(0x0F);
+  653   1      
+  654   1          ips200_write_index(0xD0);
+  655   1          ips200_write_8bit_data(0xA4);
+  656   1          ips200_write_8bit_data(0xA1);
+  657   1      
+  658   1          ips200_write_index(0xE0);
+  659   1          ips200_write_8bit_data(0xD0);
+  660   1          ips200_write_8bit_data(0x04);
+  661   1          ips200_write_8bit_data(0x0D);
+  662   1          ips200_write_8bit_data(0x11);
+  663   1          ips200_write_8bit_data(0x13);
+  664   1          ips200_write_8bit_data(0x2B);
+  665   1          ips200_write_8bit_data(0x3F);
+  666   1          ips200_write_8bit_data(0x54);
+C251 COMPILER V5.60.0,  zf_device_ips200                                                   16/11/26  15:08:58  PAGE 12  
+
+  667   1          ips200_write_8bit_data(0x4C);
+  668   1          ips200_write_8bit_data(0x18);
+  669   1          ips200_write_8bit_data(0x0D);
+  670   1          ips200_write_8bit_data(0x0B);
+  671   1          ips200_write_8bit_data(0x1F);
+  672   1          ips200_write_8bit_data(0x23);
+  673   1      
+  674   1          ips200_write_index(0xE1);
+  675   1          ips200_write_8bit_data(0xD0);
+  676   1          ips200_write_8bit_data(0x04);
+  677   1          ips200_write_8bit_data(0x0C);
+  678   1          ips200_write_8bit_data(0x11);
+  679   1          ips200_write_8bit_data(0x13);
+  680   1          ips200_write_8bit_data(0x2C);
+  681   1          ips200_write_8bit_data(0x3F);
+  682   1          ips200_write_8bit_data(0x44);
+  683   1          ips200_write_8bit_data(0x51);
+  684   1          ips200_write_8bit_data(0x2F);
+  685   1          ips200_write_8bit_data(0x1F);
+  686   1          ips200_write_8bit_data(0x1F);
+  687   1          ips200_write_8bit_data(0x20);
+  688   1          ips200_write_8bit_data(0x23);
+  689   1      
+  690   1          ips200_write_index(0x21);
+  691   1      
+  692   1          ips200_write_index(0x11);
+  693   1          system_delay_ms(120);
+  694   1      
+  695   1          ips200_write_index(0x29);
+  696   1      
+  697   1          ips200_clear(ips200_bgcolor);
+  698   1      }
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =    ------     ------
+  ecode size           =      5920     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =      1237     ------
+  xdata-const size     =    ------     ------
+  edata size           =    ------     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =        83     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

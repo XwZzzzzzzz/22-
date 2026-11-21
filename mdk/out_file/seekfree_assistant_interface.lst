@@ -1,0 +1,136 @@
+C251 COMPILER V5.60.0,  seekfree_assistant_interface                                       20/11/26  22:04:22  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE seekfree_assistant_interface
+OBJECT MODULE PLACED IN .\out_file\seekfree_assistant_interface.obj
+COMPILER INVOKED BY: D:\Keil_v5\C251\BIN\C251.EXE ..\libraries\zf_components\seekfree_assistant\seekfree_assistant_inter
+                    -face.c LARGE ROM(HUGE) WARNINGLEVEL(3) OPTIMIZE(0,SIZE) BROWSE INCDIR(..\libraries\zf_common;..\libraries\zf_components;
+                    -..\libraries\zf_device;..\libraries\zf_driver;..\user;..\code;..\libraries\zf_components\stc32g_usb_lib;..\libraries\zf_
+                    -components\seekfree_assistant) DEBUG PRINT(.\out_file\seekfree_assistant_interface.lst) TABS(2) OBJECT(.\out_file\seekfr
+                    -ee_assistant_interface.obj) 
+
+stmt  level    source
+
+    1          #include "seekfree_assistant.h"
+    2          #include "zf_device_wifi_uart.h"
+    3          #include "zf_common_headfile.h"
+    4          
+    5          
+    6          
+    7          
+    8          
+    9          
+   10          
+   11          
+   12          
+   13          
+   14          
+   15          
+   16          
+   17          
+   18          //-------------------------------------------------------------------------------------------------------
+             -------------
+   19          // º¯Êý¼ò½é     Öð·ÉÖúÊÖ·¢ËÍº¯Êý
+   20          // ²ÎÊýËµÃ÷     *buff           ÐèÒª·¢ËÍµÄÊý¾ÝµØÖ·
+   21          // ²ÎÊýËµÃ÷     length          ÐèÒª·¢ËÍµÄ³¤¶È
+   22          // ·µ»Ø²ÎÊý     uint32          Ê£ÓàÎ´·¢ËÍÊý¾Ý³¤¶È
+   23          // Ê¹ÓÃÊ¾Àý
+   24          //-------------------------------------------------------------------------------------------------------
+             -------------
+   25          uint32 (*seekfree_assistant_transfer_callback)   (const uint8 *buff, uint32 length);
+   26          
+   27          
+   28          //-------------------------------------------------------------------------------------------------------
+             -------------
+   29          // º¯Êý¼ò½é     Öð·ÉÖúÊÖ½ÓÊÕÊý¾Ýº¯Êý
+   30          // ²ÎÊýËµÃ÷     *buff           ÐèÒª½ÓÊÕµÄÊý¾ÝµØÖ·
+   31          // ²ÎÊýËµÃ÷     length          Òª½ÓÊÕµÄÊý¾Ý×î´ó³¤¶È
+   32          // ·µ»Ø²ÎÊý     uint32          ½ÓÊÕµ½µÄÊý¾Ý³¤¶È
+   33          // Ê¹ÓÃÊ¾Àý
+   34          //-------------------------------------------------------------------------------------------------------
+             -------------
+   35          uint32 (*seekfree_assistant_receive_callback)    (uint8 *buff, uint32 length);
+   36          
+   37          
+   38          //-------------------------------------------------------------------------------------------------------
+             -------------
+   39          // º¯Êý¼ò½é     Öð·ÉÖúÊÖ½Ó¿Ú ³õÊ¼»¯
+   40          // ²ÎÊýËµÃ÷
+   41          // ·µ»Ø²ÎÊý     void
+   42          // Ê¹ÓÃÊ¾Àý     seekfree_assistant_interface_init(SEEKFREE_ASSISTANT_WIFI_SPI); Ê¹ÓÃ¸ßËÙWIFI SPIÄ£¿é½øÐÐÊ
+             -ý¾ÝÊÕ·¢
+   43          // ±¸×¢         ÐèÒª×ÔÐÐµ÷ÓÃÉè±¸µÄ³õÊ¼»¯£¬ÀýÈçÊ¹ÓÃÎÞÏß×ª´®¿Ú½øÐÐÊý¾ÝµÄÊÕ·¢£¬ÔòÐèÒª×ÔÐÐµ÷ÓÃÎÞÏß×ª´®¿ÚµÄ³õÊ
+             -¼»¯£¬È»ºóÔÙµ÷ÓÃseekfree_assistant_interface_initÍê³ÉÖð·ÉÖúÊÖµÄ½Ó¿Ú³õÊ¼»¯
+   44          //-------------------------------------------------------------------------------------------------------
+             -------------
+   45          void seekfree_assistant_interface_init (seekfree_assistant_transfer_device_enum transfer_device)
+   46          {
+   47   1          switch(transfer_device)
+C251 COMPILER V5.60.0,  seekfree_assistant_interface                                       20/11/26  22:04:22  PAGE 2   
+
+   48   1          {
+   49   2              case SEEKFREE_ASSISTANT_DEBUG_UART:
+   50   2              {
+   51   3                  seekfree_assistant_transfer_callback = debug_send_buffer;
+   52   3                  seekfree_assistant_receive_callback = debug_read_buffer;
+   53   3              }break;
+   54   2              
+   55   2              case SEEKFREE_ASSISTANT_WIRELESS_UART:
+   56   2              {
+   57   3                  // seekfree_assistant_transfer_callback = wireless_uart_send_buffer;
+   58   3                  // seekfree_assistant_receive_callback = wireless_uart_read_buffer;
+   59   3              }break;
+   60   2              
+   61   2      
+   62   2              case SEEKFREE_ASSISTANT_BLE6A20:
+   63   2              {
+   64   3                  // seekfree_assistant_transfer_callback = ble6a20_send_buffer;
+   65   3                  // seekfree_assistant_receive_callback = ble6a20_read_buffer;
+   66   3              }break;
+   67   2      
+   68   2                      
+   69   2              case SEEKFREE_ASSISTANT_WIFI_SPI:
+   70   2              {
+   71   3                  seekfree_assistant_transfer_callback = wifi_spi_send_buffer;
+   72   3                  seekfree_assistant_receive_callback =   wifi_spi_read_buffer;
+   73   3              }break;
+   74   2              
+   75   2              case SEEKFREE_ASSISTANT_WIFI_UART:
+   76   2              {         
+   77   3                  seekfree_assistant_transfer_callback    =   wifi_uart_send_buffer ;
+   78   3                  seekfree_assistant_receive_callback     =   wifi_uart_read_buffer ; 
+   79   3              }break;
+   80   2              case SEEKFREE_ASSISTANT_CUSTOM:
+   81   2              {         
+   82   3                  // ¸ù¾Ý×Ô¼ºµÄÐèÇó ×ÔÐÐÊµÏÖseekfree_assistant_transferÓëseekfree_assistant_receiveº¯Êý£¬Íê³ÉÊý
+             -¾ÝµÄÊÕ
+   83   3           
+   84   3              }break;
+   85   2          }
+   86   1      }
+   87          
+   88          
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =    ------     ------
+  ecode size           =       139     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =        10     ------
+  xdata-const size     =    ------     ------
+  edata size           =    ------     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =    ------     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

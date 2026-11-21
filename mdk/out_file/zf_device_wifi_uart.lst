@@ -1,0 +1,1121 @@
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE zf_device_wifi_uart
+OBJECT MODULE PLACED IN .\out_file\zf_device_wifi_uart.obj
+COMPILER INVOKED BY: D:\Keil_v5\C251\BIN\C251.EXE ..\libraries\zf_device\zf_device_wifi_uart.c LARGE ROM(HUGE) WARNINGLE
+                    -VEL(3) OPTIMIZE(0,SIZE) BROWSE INCDIR(..\libraries\zf_common;..\libraries\zf_components;..\libraries\zf_device;..\librar
+                    -ies\zf_driver;..\user;..\code;..\libraries\zf_components\stc32g_usb_lib;..\libraries\zf_components\seekfree_assistant) D
+                    -EBUG PRINT(.\out_file\zf_device_wifi_uart.lst) TABS(2) OBJECT(.\out_file\zf_device_wifi_uart.obj) 
+
+stmt  level    source
+
+    1          /********************************************************************************************************
+             -*************
+    2          * 逐飞科技 WIFI 串口模块 —— STC32G 移植版（GPL3.0，原始版权归成都逐飞科技有限公司）
+    3          * 适配：STC32G144K246 + MDK FOR C251
+    4          *********************************************************************************************************
+             -************/
+    5          #include <string.h>
+    6          #include "zf_common_typedef.h"
+    7          #include "zf_common_debug.h"
+    8          #include "zf_common_function.h"
+    9          #include "zf_driver_delay.h"
+   10          #include "zf_driver_gpio.h"
+   11          #include "zf_driver_uart.h"
+   12          #include "zf_device_wifi_uart.h"
+   13          
+   14          
+   15          #define WIFI_UART_JOIN_TIMEOUT      ( 20000 )               // 连热点最长等待 20s
+   16          #define WIFI_UART_LINK_TIMEOUT      ( 10000 )               // 建 TCP 连接最长等待 10s
+   17          
+   18          wifi_uart_information_struct    xdata wifi_uart_information;
+   19          
+   20          /* ===================== 接收环形缓冲 ===================== */
+   21          /* C251 栈很小（默认 128 字节左右），所以所有缓冲都必须是静态的，
+   22             绝对不能在函数里写 uint8 buf[256]; 这种局部大数组，否则程序会莫名跑飞 */
+   23          static uint8 xdata  wifi_uart_rx_buf[WIFI_UART_RX_SIZE];
+   24          static uint16   wifi_uart_rx_head = 0;                      // 只被中断写
+   25          static uint16   wifi_uart_rx_tail = 0;                      // 只被主循环写
+   26          
+   27          static uint8 xdata  wifi_uart_ack_buf[160];                     // 应答解析用的静态缓冲
+   28          static uint8 xdata  wifi_uart_info_buf[256];                    // 模块信息解析用的静态缓冲
+   29          
+   30          
+   31          /* ---------------------------------------------------------------- */
+   32          /* 字符串子串查找：C251 的 string.h 里没有 strstr()，只能自己写        */
+   33          /* ---------------------------------------------------------------- */
+   34          static char * wifi_uart_strstr (const char *s1, const char *s2)
+   35          {
+   36   1          const char *p1;
+   37   1          const char *p2;
+   38   1      
+   39   1          if(0 == *s2)
+   40   1          {
+   41   2              return (char *)s1;
+   42   2          }
+   43   1          while(0 != *s1)
+   44   1          {
+   45   2              p1 = s1;
+   46   2              p2 = s2;
+   47   2              while((0 != *p1) && (0 != *p2) && (*p1 == *p2))
+   48   2              {
+   49   3                  p1++;
+   50   3                  p2++;
+   51   3              }
+   52   2              if(0 == *p2)
+   53   2              {
+   54   3                  return (char *)s1;
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 2   
+
+   55   3              }
+   56   2              s1++;
+   57   2          }
+   58   1          return (char *)0;
+   59   1      }
+   60          
+   61          /* ---------------------------------------------------------------- */
+   62          /* 环形缓冲：当前可读字节数                                          */
+   63          /* ---------------------------------------------------------------- */
+   64          static uint16 wifi_uart_rx_count (void)
+   65          {
+   66   1          uint16 head = wifi_uart_rx_head;
+   67   1      
+   68   1          if(head >= wifi_uart_rx_tail)
+   69   1          {
+   70   2              return (uint16)(head - wifi_uart_rx_tail);
+   71   2          }
+   72   1          return (uint16)(WIFI_UART_RX_SIZE - wifi_uart_rx_tail + head);
+   73   1      }
+   74          
+   75          /* ---------------------------------------------------------------- */
+   76          /* 清空接收缓冲                                                      */
+   77          /* ---------------------------------------------------------------- */
+   78          static void wifi_uart_rx_clear (void)
+   79          {
+   80   1          wifi_uart_rx_tail = wifi_uart_rx_head;
+   81   1      }
+   82          
+   83          /* ---------------------------------------------------------------- */
+   84          /* 串口接收回调：isr.c 的 DMA_UART8_IRQHandler 里每收到 1 字节调用一次  */
+   85          /* 注意签名是 void (uint8 dat)，不是 void(void) —— 这是 C251 库的约定  */
+   86          /* ---------------------------------------------------------------- */
+   87          void wifi_uart_callback (uint8 dat)
+   88          {
+   89   1          uint16 next;
+   90   1      
+   91   1          next = wifi_uart_rx_head + 1;
+   92   1          if(next >= WIFI_UART_RX_SIZE)
+   93   1          {
+   94   2              next = 0;
+   95   2          }
+   96   1          if(next != wifi_uart_rx_tail)                           // 缓冲满了就丢弃新数据
+   97   1          {
+   98   2              wifi_uart_rx_buf[wifi_uart_rx_head] = dat;
+   99   2              wifi_uart_rx_head = next;
+  100   2          }
+  101   1      }
+  102          
+  103          /* ---------------------------------------------------------------- */
+  104          /* 看一眼缓冲里的内容但不取走（等价于 CH32 版的 fifo_read_tail_buffer）  */
+  105          /* 返回实际拷贝的字节数                                              */
+  106          /* ---------------------------------------------------------------- */
+  107          static uint16 wifi_uart_rx_peek (uint8 *dst, uint16 max_len)
+  108          {
+  109   1          uint16 i;
+  110   1          uint16 pos;
+  111   1          uint16 num;
+  112   1      
+  113   1          num = wifi_uart_rx_count();
+  114   1          if(num > max_len)
+  115   1          {
+  116   2              num = max_len;
+  117   2          }
+  118   1          pos = wifi_uart_rx_tail;
+  119   1          for(i = 0; i < num; i++)
+  120   1          {
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 3   
+
+  121   2              dst[i] = wifi_uart_rx_buf[pos];
+  122   2              pos++;
+  123   2              if(pos >= WIFI_UART_RX_SIZE)
+  124   2              {
+  125   3                  pos = 0;
+  126   3              }
+  127   2          }
+  128   1          return num;
+  129   1      }
+  130          
+  131          /* ---------------------------------------------------------------- */
+  132          /* 从缓冲里真正取走数据                                              */
+  133          /* ---------------------------------------------------------------- */
+  134          uint32 wifi_uart_read_buffer (uint8 *buff, uint32 len)
+  135          {
+  136   1          uint16 i;
+  137   1          uint16 num;
+  138   1      
+  139   1          num = wifi_uart_rx_count();
+  140   1          if((uint32)num > len)
+  141   1          {
+  142   2              num = (uint16)len;
+  143   2          }
+  144   1          for(i = 0; i < num; i++)
+  145   1          {
+  146   2              buff[i] = wifi_uart_rx_buf[wifi_uart_rx_tail];
+  147   2              wifi_uart_rx_tail++;
+  148   2              if(wifi_uart_rx_tail >= WIFI_UART_RX_SIZE)
+  149   2              {
+  150   3                  wifi_uart_rx_tail = 0;
+  151   3              }
+  152   2          }
+  153   1          return (uint32)num;
+  154   1      }
+  155          
+  156          /* ---------------------------------------------------------------- */
+  157          /* 等待模块应答                                                      */
+  158          /* 参数：key1/key2 任一出现即算成功，传 NULL 表示该关键字不判断        */
+  159          /* 返回：0-收到预期应答   1-超时 / 收到 ERROR / busy                  */
+  160          /* ---------------------------------------------------------------- */
+  161          static uint8 wifi_uart_wait_ack (const char *key1, const char *key2, uint32 timeout)
+  162          {
+  163   1          uint16 num;
+  164   1          uint32 tick = timeout;
+  165   1      
+  166   1          do
+  167   1          {
+  168   2              system_delay_ms(1);
+  169   2              num = wifi_uart_rx_peek(wifi_uart_ack_buf, sizeof(wifi_uart_ack_buf) - 1);
+  170   2              wifi_uart_ack_buf[num] = 0;
+  171   2      
+  172   2              if((0 != key1) && (0 != wifi_uart_strstr((char *)wifi_uart_ack_buf, key1)))
+  173   2              {
+  174   3                  return 0;
+  175   3              }
+  176   2              if((0 != key2) && (0 != wifi_uart_strstr((char *)wifi_uart_ack_buf, key2)))
+  177   2              {
+  178   3                  return 0;
+  179   3              }
+  180   2              if(0 != wifi_uart_strstr((char *)wifi_uart_ack_buf, "ERROR"))
+  181   2              {
+  182   3                  return 1;
+  183   3              }
+  184   2              if(0 != wifi_uart_strstr((char *)wifi_uart_ack_buf, "busy"))
+  185   2              {
+  186   3                  return 1;
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 4   
+
+  187   3              }
+  188   2          }while(tick--);
+  189   1      
+  190   1          return 1;
+  191   1      }
+  192          
+  193          /* ---------------------------------------------------------------- */
+  194          /* 从 src 里找 key 之后的内容，遇到 stops 里任一字符就停              */
+  195          /* 返回：0-成功   1-没找到                                            */
+  196          /* ---------------------------------------------------------------- */
+  197          static uint8 wifi_uart_extract (uint8 *dst, uint8 dst_size, char *src, const char *key, const char *stops
+             -)
+  198          {
+  199   1          char *p;
+  200   1          uint8 i = 0;
+  201   1          uint8 k;
+  202   1          uint8 stop_flag;
+  203   1      
+  204   1          p = wifi_uart_strstr(src, key);
+  205   1          if(0 == p)
+  206   1          {
+  207   2              return 1;
+  208   2          }
+  209   1          p += strlen(key);
+  210   1          while((0 != *p) && (i < (uint8)(dst_size - 1)))
+  211   1          {
+  212   2              stop_flag = 0;
+  213   2              for(k = 0; 0 != stops[k]; k++)
+  214   2              {
+  215   3                  if(*p == stops[k])
+  216   3                  {
+  217   4                      stop_flag = 1;
+  218   4                      break;
+  219   4                  }
+  220   3              }
+  221   2              if(stop_flag)
+  222   2              {
+  223   3                  break;
+  224   3              }
+  225   2              dst[i] = (uint8)(*p);
+  226   2              i++;
+  227   2              p++;
+  228   2          }
+  229   1          dst[i] = 0;
+  230   1          return (i > 0) ? 0 : 1;
+  231   1      }
+  232          
+  233          /* ---------------------------------------------------------------- */
+  234          /* 软件复位：先尝试退出透传，再 AT+RST                                 */
+  235          /* ---------------------------------------------------------------- */
+  236          uint8 wifi_uart_soft_reset (void)
+  237          {
+  238   1          uint8 state;
+  239   1      
+  240   1          wifi_uart_rx_clear();
+  241   1          uart_write_string(WIFI_UART_INDEX, "+++");
+  242   1          system_delay_ms(50);
+  243   1          wifi_uart_rx_clear();
+  244   1      
+  245   1          uart_write_string(WIFI_UART_INDEX, "AT+RST\r\n");
+  246   1          state = wifi_uart_wait_ack("ready", 0, WIFI_UART_RST_TIMEOUT);
+  247   1          wifi_uart_rx_clear();
+  248   1      
+  249   1          return state;
+  250   1      }
+  251          
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 5   
+
+  252          /* ---------------------------------------------------------------- */
+  253          /* 复位（按宏选软/硬）                                                */
+  254          /* ---------------------------------------------------------------- */
+  255          uint8 wifi_uart_reset (void)
+  256          {
+  257   1      #if WIFI_UART_HARDWARE_RST
+                   uint8 state;
+               
+                   gpio_set_level(WIFI_UART_RST_PIN, 0);
+                   system_delay_ms(50);
+                   gpio_set_level(WIFI_UART_RST_PIN, 1);
+                   system_delay_ms(200);
+                   wifi_uart_rx_clear();
+                   state = wifi_uart_wait_ack("ready", 0, WIFI_UART_RST_TIMEOUT);
+                   wifi_uart_rx_clear();
+                   return state;
+               #else
+  269   1          return wifi_uart_soft_reset();
+  270   1      #endif
+  271   1      }
+  272          
+  273          /* ---------------------------------------------------------------- */
+  274          /* 读模块固件版本                                                    */
+  275          /* ---------------------------------------------------------------- */
+  276          static uint8 wifi_uart_get_version (void)
+  277          {
+  278   1          uint8 state = 0;
+  279   1          uint16 num;
+  280   1      
+  281   1          wifi_uart_rx_clear();
+  282   1          uart_write_string(WIFI_UART_INDEX, "AT+GMR\r\n");
+  283   1          do
+  284   1          {
+  285   2              if(wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT))
+  286   2              {
+  287   3                  state = 1;
+  288   3                  break;
+  289   3              }
+  290   2              num = wifi_uart_rx_peek(wifi_uart_info_buf, sizeof(wifi_uart_info_buf) - 1);
+  291   2              wifi_uart_info_buf[num] = 0;
+  292   2              if(wifi_uart_extract(wifi_uart_information.wifi_uart_version,
+  293   2                                   sizeof(wifi_uart_information.wifi_uart_version),
+  294   2                                   (char *)wifi_uart_info_buf, "version:", "( \r\n"))
+  295   2              {
+  296   3                  memcpy(wifi_uart_information.wifi_uart_version, "unknown", 8);
+  297   3              }
+  298   2          }while(0);
+  299   1          wifi_uart_rx_clear();
+  300   1          return state;
+  301   1      }
+  302          
+  303          /* ---------------------------------------------------------------- */
+  304          /* 读模块 MAC 地址                                                   */
+  305          /* ---------------------------------------------------------------- */
+  306          static uint8 wifi_uart_get_mac (void)
+  307          {
+  308   1          uint8 state = 0;
+  309   1          uint16 num;
+  310   1      
+  311   1          wifi_uart_rx_clear();
+  312   1          uart_write_string(WIFI_UART_INDEX, "AT+CIPAPMAC?\r\n");
+  313   1          do
+  314   1          {
+  315   2              if(wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT))
+  316   2              {
+  317   3                  state = 1;
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 6   
+
+  318   3                  break;
+  319   3              }
+  320   2              num = wifi_uart_rx_peek(wifi_uart_info_buf, sizeof(wifi_uart_info_buf) - 1);
+  321   2              wifi_uart_info_buf[num] = 0;
+  322   2              if(wifi_uart_extract(wifi_uart_information.wifi_uart_mac,
+  323   2                                   sizeof(wifi_uart_information.wifi_uart_mac),
+  324   2                                   (char *)wifi_uart_info_buf, "sta:\"", "\"\r\n"))
+  325   2              {
+  326   3                  memcpy(wifi_uart_information.wifi_uart_mac, "unknown", 8);
+  327   3              }
+  328   2          }while(0);
+  329   1          wifi_uart_rx_clear();
+  330   1          return state;
+  331   1      }
+  332          
+  333          /* ---------------------------------------------------------------- */
+  334          /* 读模块 IP 地址                                                    */
+  335          /* ---------------------------------------------------------------- */
+  336          static uint8 wifi_uart_get_ip (void)
+  337          {
+  338   1          uint8 state = 0;
+  339   1          uint16 num;
+  340   1      
+  341   1          wifi_uart_rx_clear();
+  342   1          if(WIFI_UART_STATION == wifi_uart_information.wifi_uart_mode)
+  343   1          {
+  344   2              uart_write_string(WIFI_UART_INDEX, "AT+CIPSTA?\r\n");
+  345   2          }
+  346   1          else
+  347   1          {
+  348   2              uart_write_string(WIFI_UART_INDEX, "AT+CIPAP?\r\n");
+  349   2          }
+  350   1          do
+  351   1          {
+  352   2              if(wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT))
+  353   2              {
+  354   3                  state = 1;
+  355   3                  break;
+  356   3              }
+  357   2              num = wifi_uart_rx_peek(wifi_uart_info_buf, sizeof(wifi_uart_info_buf) - 1);
+  358   2              wifi_uart_info_buf[num] = 0;
+  359   2              if(wifi_uart_extract(wifi_uart_information.wifi_uart_local_ip,
+  360   2                                   sizeof(wifi_uart_information.wifi_uart_local_ip),
+  361   2                                   (char *)wifi_uart_info_buf, "ip:\"", "\"\r\n"))
+  362   2              {
+  363   3                  memcpy(wifi_uart_information.wifi_uart_local_ip, "0.0.0.0", 8);
+  364   3              }
+  365   2          }while(0);
+  366   1          wifi_uart_rx_clear();
+  367   1          return state;
+  368   1      }
+  369          
+  370          /* ---------------------------------------------------------------- */
+  371          /* 读取模块全部信息                                                  */
+  372          /* ---------------------------------------------------------------- */
+  373          static uint8 wifi_uart_get_information (void)
+  374          {
+  375   1          if(0 == wifi_uart_get_version())
+  376   1          {
+  377   2              if(0 == wifi_uart_get_ip())
+  378   2              {
+  379   3                  (void)wifi_uart_get_mac();
+  380   3              }
+  381   2          }
+  382   1          memcpy(wifi_uart_information.wifi_uart_local_port, "no port", 8);
+  383   1          return 0;
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 7   
+
+  384   1      }
+  385          
+  386          /* ---------------------------------------------------------------- */
+  387          /* 关闭/打开 AT 回显                                                 */
+  388          /* ---------------------------------------------------------------- */
+  389          static uint8 wifi_uart_echo_set (char *model)
+  390          {
+  391   1          uint8 state;
+  392   1      
+  393   1          wifi_uart_rx_clear();
+  394   1          uart_write_string(WIFI_UART_INDEX, "ATE");
+  395   1          uart_write_string(WIFI_UART_INDEX, model);
+  396   1          uart_write_string(WIFI_UART_INDEX, "\r\n");
+  397   1          state = wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT);
+  398   1          wifi_uart_rx_clear();
+  399   1          return state;
+  400   1      }
+  401          
+  402          /* ---------------------------------------------------------------- */
+  403          /* 设置模块串口参数（掉电不保存）                                     */
+  404          /* ---------------------------------------------------------------- */
+  405          static uint8 wifi_uart_uart_config_set (char *baudrate, char *databits, char *stopbits, char *parity, cha
+             -r *flow)
+  406          {
+  407   1          uint8 state;
+  408   1      
+  409   1          wifi_uart_rx_clear();
+  410   1          uart_write_string(WIFI_UART_INDEX, "AT+UART_CUR=");
+  411   1          uart_write_string(WIFI_UART_INDEX, baudrate);
+  412   1          uart_write_string(WIFI_UART_INDEX, ",");
+  413   1          uart_write_string(WIFI_UART_INDEX, databits);
+  414   1          uart_write_string(WIFI_UART_INDEX, ",");
+  415   1          uart_write_string(WIFI_UART_INDEX, stopbits);
+  416   1          uart_write_string(WIFI_UART_INDEX, ",");
+  417   1          uart_write_string(WIFI_UART_INDEX, parity);
+  418   1          uart_write_string(WIFI_UART_INDEX, ",");
+  419   1          uart_write_string(WIFI_UART_INDEX, flow);
+  420   1          uart_write_string(WIFI_UART_INDEX, "\r\n");
+  421   1          state = wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT);
+  422   1          wifi_uart_rx_clear();
+  423   1          return state;
+  424   1      }
+  425          
+  426          /* ---------------------------------------------------------------- */
+  427          /* 上电是否自动重连热点                                              */
+  428          /* ---------------------------------------------------------------- */
+  429          static uint8 wifi_uart_auto_connect_wifi (char *model)
+  430          {
+  431   1          uint8 state;
+  432   1      
+  433   1          wifi_uart_rx_clear();
+  434   1          uart_write_string(WIFI_UART_INDEX, "AT+CWAUTOCONN=");
+  435   1          uart_write_string(WIFI_UART_INDEX, model);
+  436   1          uart_write_string(WIFI_UART_INDEX, "\r\n");
+  437   1          state = wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT);
+  438   1          wifi_uart_rx_clear();
+  439   1          return state;
+  440   1      }
+  441          
+  442          /* ---------------------------------------------------------------- */
+  443          /* 设置连接模式 0-单连接 1-多连接                                     */
+  444          /* ---------------------------------------------------------------- */
+  445          static uint8 wifi_uart_set_connect_model (char *model)
+  446          {
+  447   1          uint8 state;
+  448   1      
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 8   
+
+  449   1          wifi_uart_rx_clear();
+  450   1          uart_write_string(WIFI_UART_INDEX, "AT+CIPMUX=");
+  451   1          uart_write_string(WIFI_UART_INDEX, model);
+  452   1          uart_write_string(WIFI_UART_INDEX, "\r\n");
+  453   1          state = wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT);
+  454   1          wifi_uart_rx_clear();
+  455   1          return state;
+  456   1      }
+  457          
+  458          /* ---------------------------------------------------------------- */
+  459          /* 设置传输模式 0-普通 1-透传                                         */
+  460          /* ---------------------------------------------------------------- */
+  461          static uint8 wifi_uart_set_transfer_model (char *model)
+  462          {
+  463   1          uint8 state;
+  464   1      
+  465   1          wifi_uart_rx_clear();
+  466   1          uart_write_string(WIFI_UART_INDEX, "AT+CIPMODE=");
+  467   1          uart_write_string(WIFI_UART_INDEX, model);
+  468   1          uart_write_string(WIFI_UART_INDEX, "\r\n");
+  469   1          state = wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT);
+  470   1          wifi_uart_rx_clear();
+  471   1          return state;
+  472   1      }
+  473          
+  474          /* ---------------------------------------------------------------- */
+  475          /* 设置模块工作模式                                                  */
+  476          /* ---------------------------------------------------------------- */
+  477          uint8 wifi_uart_set_model (wifi_uart_mode_enum mode)
+  478          {
+  479   1          uint8 state;
+  480   1      
+  481   1          wifi_uart_rx_clear();
+  482   1          if(WIFI_UART_SOFTAP == mode)
+  483   1          {
+  484   2              uart_write_string(WIFI_UART_INDEX, "AT+CWMODE=2\r\n");
+  485   2          }
+  486   1          else
+  487   1          {
+  488   2              uart_write_string(WIFI_UART_INDEX, "AT+CWMODE=1\r\n");
+  489   2          }
+  490   1          wifi_uart_information.wifi_uart_mode = mode;
+  491   1          state = wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT);
+  492   1          wifi_uart_rx_clear();
+  493   1          return state;
+  494   1      }
+  495          
+  496          /* ---------------------------------------------------------------- */
+  497          /* 连接热点 / 开热点                                                 */
+  498          /* ---------------------------------------------------------------- */
+  499          static uint8 wifi_uart_set_wifi (char *wifi_ssid, char *pass_word)
+  500          {
+  501   1          uint8 state;
+  502   1      
+  503   1          wifi_uart_rx_clear();
+  504   1          if(WIFI_UART_SOFTAP == wifi_uart_information.wifi_uart_mode)
+  505   1          {
+  506   2              uart_write_string(WIFI_UART_INDEX, "AT+CWSAP=\"");
+  507   2              uart_write_string(WIFI_UART_INDEX, wifi_ssid);
+  508   2              uart_write_string(WIFI_UART_INDEX, "\",\"");
+  509   2              uart_write_string(WIFI_UART_INDEX, pass_word);
+  510   2              uart_write_string(WIFI_UART_INDEX, "\",5,3\r\n");
+  511   2          }
+  512   1          else
+  513   1          {
+  514   2              uart_write_string(WIFI_UART_INDEX, "AT+CWJAP=\"");
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 9   
+
+  515   2              uart_write_string(WIFI_UART_INDEX, wifi_ssid);
+  516   2              uart_write_string(WIFI_UART_INDEX, "\",\"");
+  517   2              uart_write_string(WIFI_UART_INDEX, pass_word);
+  518   2              uart_write_string(WIFI_UART_INDEX, "\"\r\n");
+  519   2          }
+  520   1          state = wifi_uart_wait_ack("OK", "WIFI GOT IP", WIFI_UART_JOIN_TIMEOUT);
+  521   1          wifi_uart_rx_clear();
+  522   1          return state;
+  523   1      }
+  524          
+  525          /* ---------------------------------------------------------------- */
+  526          /* 断开热点                                                          */
+  527          /* ---------------------------------------------------------------- */
+  528          uint8 wifi_uart_disconnected_wifi (void)
+  529          {
+  530   1          uint8 state;
+  531   1      
+  532   1          wifi_uart_rx_clear();
+  533   1          uart_write_string(WIFI_UART_INDEX, "AT+CWQAP\r\n");
+  534   1          state = wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT);
+  535   1          wifi_uart_rx_clear();
+  536   1          return state;
+  537   1      }
+  538          
+  539          /* ---------------------------------------------------------------- */
+  540          /* 进入透传                                                          */
+  541          /* ---------------------------------------------------------------- */
+  542          uint8 wifi_uart_entry_serianet (void)
+  543          {
+  544   1          uint8 state;
+  545   1      
+  546   1          wifi_uart_rx_clear();
+  547   1          uart_write_string(WIFI_UART_INDEX, "AT+CIPSEND\r\n");
+  548   1          state = wifi_uart_wait_ack(">", "OK", WIFI_UART_ACK_TIMEOUT);
+  549   1          wifi_uart_rx_clear();
+  550   1          return state;
+  551   1      }
+  552          
+  553          /* ---------------------------------------------------------------- */
+  554          /* 退出透传                                                          */
+  555          /* ---------------------------------------------------------------- */
+  556          uint8 wifi_uart_exit_serianet (void)
+  557          {
+  558   1          system_delay_ms(20);
+  559   1          uart_write_string(WIFI_UART_INDEX, "+++");
+  560   1          system_delay_ms(1000);
+  561   1          wifi_uart_rx_clear();
+  562   1          return 0;
+  563   1      }
+  564          
+  565          /* ---------------------------------------------------------------- */
+  566          /* 连接 TCP 服务器                                                   */
+  567          /* ---------------------------------------------------------------- */
+  568          uint8 wifi_uart_connect_tcp_servers (char *ip, char *port, wifi_uart_transfer_mode_enum mode)
+  569          {
+  570   1          uint8 state = 0;
+  571   1      
+  572   1          wifi_uart_rx_clear();
+  573   1          do
+  574   1          {
+  575   2              if(wifi_uart_set_connect_model("0"))
+  576   2              {
+  577   3                  state = 1;
+  578   3                  break;
+  579   3              }
+  580   2              wifi_uart_rx_clear();
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 10  
+
+  581   2      
+  582   2              uart_write_string(WIFI_UART_INDEX, "AT+CIPSTARTEX=\"TCP\",\"");
+  583   2              uart_write_string(WIFI_UART_INDEX, ip);
+  584   2              uart_write_string(WIFI_UART_INDEX, "\",");
+  585   2              uart_write_string(WIFI_UART_INDEX, port);
+  586   2              uart_write_string(WIFI_UART_INDEX, "\r\n");
+  587   2      
+  588   2              if(wifi_uart_wait_ack("OK", "CONNECT", WIFI_UART_LINK_TIMEOUT))
+  589   2              {
+  590   3                  state = 1;
+  591   3                  wifi_uart_information.wifi_uart_connect_state = WIFI_UART_SERVER_OFF;
+  592   3                  break;
+  593   3              }
+  594   2              wifi_uart_rx_clear();
+  595   2      
+  596   2              if(wifi_uart_set_transfer_model((WIFI_UART_COMMAND == mode) ? "0" : "1"))
+  597   2              {
+  598   3                  state = 1;
+  599   3                  break;
+  600   3              }
+  601   2      
+  602   2              wifi_uart_information.wifi_uart_connect_state = WIFI_UART_SERVER_ON;
+  603   2              wifi_uart_information.wifi_uart_connect_mode  = WIFI_UART_TCP_CLIENT;
+  604   2              wifi_uart_information.wifi_uart_transfer_mode = mode;
+  605   2      
+  606   2              wifi_uart_rx_clear();
+  607   2              if(WIFI_UART_SERIANET == mode)
+  608   2              {
+  609   3                  if(wifi_uart_entry_serianet())
+  610   3                  {
+  611   4                      state = 1;
+  612   4                      break;
+  613   4                  }
+  614   3              }
+  615   2          }while(0);
+  616   1      
+  617   1          wifi_uart_rx_clear();
+  618   1          return state;
+  619   1      }
+  620          
+  621          /* ---------------------------------------------------------------- */
+  622          /* 建立 UDP 连接                                                     */
+  623          /* ---------------------------------------------------------------- */
+  624          uint8 wifi_uart_connect_udp_client (char *ip, char *port, char *local_port, wifi_uart_transfer_mode_enum 
+             -mode)
+  625          {
+  626   1          uint8 state = 0;
+  627   1      
+  628   1          wifi_uart_rx_clear();
+  629   1          do
+  630   1          {
+  631   2              if(wifi_uart_set_connect_model("0"))
+  632   2              {
+  633   3                  state = 1;
+  634   3                  break;
+  635   3              }
+  636   2              wifi_uart_rx_clear();
+  637   2      
+  638   2              uart_write_string(WIFI_UART_INDEX, "AT+CIPSTARTEX=\"UDP\",\"");
+  639   2              uart_write_string(WIFI_UART_INDEX, ip);
+  640   2              uart_write_string(WIFI_UART_INDEX, "\",");
+  641   2              uart_write_string(WIFI_UART_INDEX, port);
+  642   2              uart_write_string(WIFI_UART_INDEX, ",");
+  643   2              uart_write_string(WIFI_UART_INDEX, local_port);
+  644   2              uart_write_string(WIFI_UART_INDEX, "\r\n");
+  645   2      
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 11  
+
+  646   2              if(wifi_uart_wait_ack("OK", "CONNECT", WIFI_UART_LINK_TIMEOUT))
+  647   2              {
+  648   3                  state = 1;
+  649   3                  wifi_uart_information.wifi_uart_connect_state = WIFI_UART_SERVER_OFF;
+  650   3                  break;
+  651   3              }
+  652   2              wifi_uart_rx_clear();
+  653   2      
+  654   2              if(wifi_uart_set_transfer_model((WIFI_UART_COMMAND == mode) ? "0" : "1"))
+  655   2              {
+  656   3                  state = 1;
+  657   3                  break;
+  658   3              }
+  659   2              wifi_uart_rx_clear();
+  660   2              if(WIFI_UART_SERIANET == mode)
+  661   2              {
+  662   3                  if(wifi_uart_entry_serianet())
+  663   3                  {
+  664   4                      state = 1;
+  665   4                      break;
+  666   4                  }
+  667   3              }
+  668   2              wifi_uart_information.wifi_uart_connect_state = WIFI_UART_SERVER_ON;
+  669   2              wifi_uart_information.wifi_uart_connect_mode  = WIFI_UART_UDP_CLIENT;
+  670   2              wifi_uart_information.wifi_uart_transfer_mode = mode;
+  671   2          }while(0);
+  672   1      
+  673   1          wifi_uart_rx_clear();
+  674   1          return state;
+  675   1      }
+  676          
+  677          /* ---------------------------------------------------------------- */
+  678          /* 断开连接                                                          */
+  679          /* ---------------------------------------------------------------- */
+  680          uint8 wifi_uart_disconnect_link (void)
+  681          {
+  682   1          uint8 state;
+  683   1      
+  684   1          wifi_uart_rx_clear();
+  685   1          if(WIFI_UART_TCP_SERVER == wifi_uart_information.wifi_uart_connect_mode)
+  686   1          {
+  687   2              uart_write_string(WIFI_UART_INDEX, "AT+CIPCLOSE=5\r\n");
+  688   2          }
+  689   1          else
+  690   1          {
+  691   2              uart_write_string(WIFI_UART_INDEX, "AT+CIPCLOSE\r\n");
+  692   2          }
+  693   1          state = wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT);
+  694   1          wifi_uart_information.wifi_uart_connect_state = WIFI_UART_SERVER_OFF;
+  695   1          wifi_uart_rx_clear();
+  696   1          return state;
+  697   1      }
+  698          
+  699          /* ---------------------------------------------------------------- */
+  700          /* 建立 TCP 服务器                                                   */
+  701          /* ---------------------------------------------------------------- */
+  702          uint8 wifi_uart_entry_tcp_servers (char *port)
+  703          {
+  704   1          uint8 state = 0;
+  705   1      
+  706   1          wifi_uart_rx_clear();
+  707   1          do
+  708   1          {
+  709   2              if(wifi_uart_set_transfer_model("0"))
+  710   2              {
+  711   3                  state = 1;
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 12  
+
+  712   3                  break;
+  713   3              }
+  714   2              wifi_uart_rx_clear();
+  715   2              if(wifi_uart_set_connect_model("1"))
+  716   2              {
+  717   3                  state = 1;
+  718   3                  break;
+  719   3              }
+  720   2              wifi_uart_rx_clear();
+  721   2      
+  722   2              uart_write_string(WIFI_UART_INDEX, "AT+CIPSERVER=1,");
+  723   2              uart_write_string(WIFI_UART_INDEX, port);
+  724   2              uart_write_string(WIFI_UART_INDEX, "\r\n");
+  725   2      
+  726   2              if(wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT))
+  727   2              {
+  728   3                  state = 1;
+  729   3                  break;
+  730   3              }
+  731   2              memcpy(wifi_uart_information.wifi_uart_local_port, port, strlen(port));
+  732   2              wifi_uart_information.wifi_uart_connect_state = WIFI_UART_SERVER_ON;
+  733   2              wifi_uart_information.wifi_uart_transfer_mode = WIFI_UART_COMMAND;
+  734   2              wifi_uart_information.wifi_uart_connect_mode  = WIFI_UART_TCP_SERVER;
+  735   2          }while(0);
+  736   1      
+  737   1          wifi_uart_rx_clear();
+  738   1          return state;
+  739   1      }
+  740          
+  741          /* ---------------------------------------------------------------- */
+  742          /* 关闭 TCP 服务器                                                   */
+  743          /* ---------------------------------------------------------------- */
+  744          uint8 wifi_uart_exit_tcp_servers (void)
+  745          {
+  746   1          uint8 state;
+  747   1      
+  748   1          wifi_uart_rx_clear();
+  749   1          uart_write_string(WIFI_UART_INDEX, "AT+CIPSERVER=0,1\r\n");
+  750   1          state = wifi_uart_wait_ack("OK", 0, WIFI_UART_ACK_TIMEOUT);
+  751   1          wifi_uart_information.wifi_uart_connect_state = WIFI_UART_SERVER_OFF;
+  752   1          wifi_uart_rx_clear();
+  753   1          return state;
+  754   1      }
+  755          
+  756          /* ---------------------------------------------------------------- */
+  757          /* 发送一段数据（普通模式）：AT+CIPSEND=n -> 等 > -> 发 n 字节        */
+  758          /* ---------------------------------------------------------------- */
+  759          static uint8 wifi_uart_send_once (const uint8 *buff, uint16 len)
+  760          {
+  761   1          static char lenth[16];
+  762   1          uint8 state = 1;
+  763   1      
+  764   1          func_int_to_str(lenth, (int32)len);
+  765   1      
+  766   1          wifi_uart_rx_clear();
+  767   1          uart_write_string(WIFI_UART_INDEX, "AT+CIPSEND=");
+  768   1          uart_write_string(WIFI_UART_INDEX, lenth);
+  769   1          uart_write_string(WIFI_UART_INDEX, "\r\n");
+  770   1      
+  771   1          if(0 == wifi_uart_wait_ack(">", "OK", WIFI_UART_ACK_TIMEOUT))   // 模块允许发送
+  772   1          {
+  773   2              wifi_uart_rx_clear();
+  774   2              uart_write_buffer(WIFI_UART_INDEX, buff, len);
+  775   2              if(0 == wifi_uart_wait_ack("SEND OK", "OK", WIFI_UART_ACK_TIMEOUT))
+  776   2              {
+  777   3                  state = 0;
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 13  
+
+  778   3              }
+  779   2          }
+  780   1          wifi_uart_rx_clear();
+  781   1          return state;
+  782   1      }
+  783          
+  784          /* ---------------------------------------------------------------- */
+  785          /* 发送数据（对外接口）：自动按 WIFI_UART_SEND_ONCE 分块              */
+  786          /* 返回剩余未发送的字节数，0 表示全部发完                             */
+  787          /* ---------------------------------------------------------------- */
+  788          uint32 wifi_uart_send_buffer (const uint8 *buff, uint32 len)
+  789          {
+  790   1          uint16 offset = 0;
+  791   1          uint16 send_len;
+  792   1          uint32 rest = len;
+  793   1      
+  794   1          if(WIFI_UART_SERVER_ON != wifi_uart_information.wifi_uart_connect_state)
+  795   1          {
+  796   2              return len;
+  797   2          }
+  798   1      
+  799   1          if(WIFI_UART_COMMAND == wifi_uart_information.wifi_uart_transfer_mode)
+  800   1          {
+  801   2              while(rest > 0)
+  802   2              {
+  803   3                  send_len = (rest > WIFI_UART_SEND_ONCE) ? (uint16)WIFI_UART_SEND_ONCE : (uint16)rest;
+  804   3                  if(wifi_uart_send_once(&buff[offset], send_len))
+  805   3                  {
+  806   4                      break;
+  807   4                  }
+  808   3                  offset += send_len;
+  809   3                  rest   -= send_len;
+  810   3              }
+  811   2          }
+  812   1          else
+  813   1          {
+  814   2              /* 透传模式：直接往串口丢，模块自己转发 */
+  815   2      #if WIFI_UART_RTS_ENABLE
+                       {
+                           uint32 guard = 100000;
+                           while(rest > 0)
+                           {
+                               guard = 100000;
+                               while(gpio_get_level(WIFI_UART_RTS_PIN) && (0 < guard--));
+                               uart_write_byte(WIFI_UART_INDEX, buff[offset]);
+                               offset++;
+                               rest--;
+                           }
+                       }
+               #else
+  828   2              uart_write_buffer(WIFI_UART_INDEX, buff, (uint16)rest);
+  829   2              rest = 0;
+  830   2      #endif
+  831   2          }
+  832   1          return rest;
+  833   1      }
+  834          
+  835          /* ---------------------------------------------------------------- */
+  836          /* 模块作为 TCP 服务器，指定客户端发送                               */
+  837          /* ---------------------------------------------------------------- */
+  838          uint32 wifi_uart_send_byte (const uint8 dat)
+  839          {
+  840   1          uint8 temp = dat;
+  841   1      
+  842   1          return wifi_uart_send_buffer(&temp, 1);
+  843   1      }
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 14  
+
+  844          
+  845          uint32 wifi_uart_send_string (const char *str)
+  846          {
+  847   1          return wifi_uart_send_buffer((const uint8 *)str, (uint32)strlen(str));
+  848   1      }
+  849          
+  850          uint32 wifi_uart_tcp_servers_send_buffer (const uint8 *buff, uint32 len, wifi_uart_link_id_enum id)
+  851          {
+  852   1          static char lenth[16];
+  853   1          uint16 offset = 0;
+  854   1          uint16 send_len;
+  855   1          uint32 rest = len;
+  856   1      
+  857   1          if((WIFI_UART_COMMAND != wifi_uart_information.wifi_uart_transfer_mode) ||
+  858   1             (WIFI_UART_TCP_SERVER != wifi_uart_information.wifi_uart_connect_mode))
+  859   1          {
+  860   2              return len;
+  861   2          }
+  862   1      
+  863   1          while(rest > 0)
+  864   1          {
+  865   2              send_len = (rest > WIFI_UART_SEND_ONCE) ? (uint16)WIFI_UART_SEND_ONCE : (uint16)rest;
+  866   2              func_int_to_str(lenth, (int32)send_len);
+  867   2      
+  868   2              wifi_uart_rx_clear();
+  869   2              uart_write_string(WIFI_UART_INDEX, "AT+CIPSEND=");
+  870   2              uart_write_byte(WIFI_UART_INDEX, (uint8)(id + '0'));
+  871   2              uart_write_string(WIFI_UART_INDEX, ",");
+  872   2              uart_write_string(WIFI_UART_INDEX, lenth);
+  873   2              uart_write_string(WIFI_UART_INDEX, "\r\n");
+  874   2      
+  875   2              if(0 == wifi_uart_wait_ack(">", "OK", WIFI_UART_ACK_TIMEOUT))
+  876   2              {
+  877   3                  wifi_uart_rx_clear();
+  878   3                  uart_write_buffer(WIFI_UART_INDEX, &buff[offset], send_len);
+  879   3                  if(wifi_uart_wait_ack("SEND OK", "OK", WIFI_UART_ACK_TIMEOUT))
+  880   3                  {
+  881   4                      break;
+  882   4                  }
+  883   3              }
+  884   2              else
+  885   2              {
+  886   3                  break;
+  887   3              }
+  888   2              offset += send_len;
+  889   2              rest   -= send_len;
+  890   2          }
+  891   1          wifi_uart_rx_clear();
+  892   1          return rest;
+  893   1      }
+  894          
+  895          /* ---------------------------------------------------------------- */
+  896          /* 模块初始化                                                        */
+  897          /* 参数：wifi_ssid  热点名称                                          */
+  898          /*       pass_word  热点密码（无密码传 NULL 或 ""）                    */
+  899          /*       wifi_mode  WIFI_UART_STATION / WIFI_UART_SOFTAP              */
+  900          /* 返回：0-成功   1-失败                                              */
+  901          /* ---------------------------------------------------------------- */
+  902          uint8 wifi_uart_init (char *wifi_ssid, char *pass_word, wifi_uart_mode_enum wifi_mode)
+  903          {
+  904   1          uint8  state = 0;
+  905   1          uint8  probe = 0;
+  906   1          uint8  probe_ok = 0;
+  907   1          char   baud_rate[16];
+  908   1      
+  909   1          wifi_uart_rx_clear();
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 15  
+
+  910   1          wifi_uart_rx_head = 0;
+  911   1          wifi_uart_rx_tail = 0;
+  912   1      
+  913   1      #if WIFI_UART_RTS_ENABLE
+                   gpio_init(WIFI_UART_RTS_PIN, GPI, 1, GPI_PULL_UP);
+               #endif
+  916   1      #if WIFI_UART_HARDWARE_RST
+                   gpio_init(WIFI_UART_RST_PIN, GPO, 1, GPO_PUSH_PULL);
+               #endif
+  919   1      
+  920   1          /* 先用 115200（模块出厂默认）跟它建立通信 */
+  921   1          /* ----------------------------------------------------------------
+  922   1             依次尝试常见波特率，找出模块当前所在的档位
+  923   1             原因：上一次运行时 AT+UART_CUR 会把模块改到别的波特率，
+  924   1                   如果这里只试一个值，下次上电就会死锁（收不到 OK）
+  925   1             ---------------------------------------------------------------- */
+  926   1          {
+  927   2              static const uint32 wifi_uart_probe_baud[] = {115200, 1500000, 921600, 460800, 230400, 9600};
+  928   2              uint8 bi;
+  929   2      
+  930   2              for(bi = 0; bi < 6 && (0 == probe_ok); bi ++)
+  931   2              {
+  932   3                  uart_init(WIFI_UART_INDEX, wifi_uart_probe_baud[bi], WIFI_UART_TX_PIN, WIFI_UART_RX_PIN);
+  933   3                  uart_rx_interrupt(WIFI_UART_INDEX, 1, wifi_uart_callback);
+  934   3      
+  935   3                  for(probe = 0; probe < 3; probe ++)
+  936   3                  {
+  937   4                      system_delay_ms(200);
+  938   4                      wifi_uart_rx_clear();
+  939   4                      uart_write_string(WIFI_UART_INDEX, "AT\r\n");
+  940   4      
+  941   4                      if(0 == wifi_uart_wait_ack("OK", 0, 300))
+  942   4                      {
+  943   5                          probe_ok = 1;
+  944   5                          break;
+  945   5                      }
+  946   4                  }
+  947   3      
+  948   3                  printf("\r\n[wifi_uart] probe %d kHz -> ", (int)(wifi_uart_probe_baud[bi] / 1000));
+  949   3                  if(probe_ok)    printf("OK\r\n");
+  950   3                  else            printf("no\r\n");
+  951   3              }
+  952   2          }
+  953   1      
+  954   1          if(0 == probe_ok)                                       // 完全不回话，再试一次软复位
+  955   1          {
+  956   2              wifi_uart_reset();
+  957   2              wifi_uart_rx_clear();
+  958   2              uart_write_string(WIFI_UART_INDEX, "AT\r\n");
+  959   2      
+  960   2              if(0 == wifi_uart_wait_ack("OK", 0, 1000))
+  961   2              {
+  962   3                  probe_ok = 1;
+  963   3                  printf("\r\n[wifi_uart] module ready after reset\r\n");
+  964   3              }
+  965   2          }
+  966   1      
+  967   1          if(0 == probe_ok)
+  968   1          {
+  969   2              printf("\r\n[wifi_uart] module no response: check TX/RX wiring and baud rate\r\n");
+  970   2              return 1;
+  971   2          }
+  972   1          printf("\r\n[wifi_uart] module ready (probe %d)\r\n", probe + 1);
+  973   1      
+  974   1          do
+  975   1          {
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 16  
+
+  976   2              /* 把模块串口改成目标波特率。流控填 0，因为主板一般没接 RTS */
+  977   2              func_int_to_str(baud_rate, WIFI_UART_BAUD);
+  978   2              if(wifi_uart_uart_config_set(baud_rate, "8", "1", "0", "0"))
+  979   2              {
+  980   3                  printf("\r\n[wifi_uart] set baud failed\r\n");
+  981   3                  state = 1;
+  982   3                  break;
+  983   3              }
+  984   2      
+  985   2              /* 单片机这边同步切到新波特率 */
+  986   2              uart_init(WIFI_UART_INDEX, WIFI_UART_BAUD, WIFI_UART_TX_PIN, WIFI_UART_RX_PIN);
+  987   2              uart_rx_interrupt(WIFI_UART_INDEX, 1, wifi_uart_callback);
+  988   2              system_delay_ms(100);
+  989   2      
+  990   2              if(wifi_uart_echo_set("0"))
+  991   2              {
+  992   3                  printf("\r\n[wifi_uart] close echo failed\r\n");
+  993   3                  state = 1;
+  994   3                  break;
+  995   3              }
+  996   2      
+  997   2              if(wifi_uart_auto_connect_wifi("0"))
+  998   2              {
+  999   3                  printf("\r\n[wifi_uart] close auto connect failed\r\n");
+ 1000   3                  state = 1;
+ 1001   3                  break;
+ 1002   3              }
+ 1003   2      
+ 1004   2              if(wifi_uart_set_model(wifi_mode))
+ 1005   2              {
+ 1006   3                  printf("\r\n[wifi_uart] set model failed\r\n");
+ 1007   3                  state = 1;
+ 1008   3                  break;
+ 1009   3              }
+ 1010   2      
+ 1011   2              if(wifi_uart_set_wifi(wifi_ssid, pass_word))
+ 1012   2              {
+ 1013   3                  printf("\r\n[wifi_uart] join ap failed\r\n");
+ 1014   3                  state = 1;
+ 1015   3                  break;
+ 1016   3              }
+ 1017   2      
+ 1018   2              wifi_uart_get_information();
+ 1019   2      
+ 1020   2      #if (1 == WIFI_UART_AUTO_CONNECT)
+                       if(wifi_uart_connect_tcp_servers(WIFI_UART_TARGET_IP, WIFI_UART_TARGET_PORT, WIFI_UART_COMMAND))
+                       {
+                           printf("\r\n[wifi_uart] connect tcp failed\r\n");
+                           state = 1;
+                           break;
+                       }
+               #elif (2 == WIFI_UART_AUTO_CONNECT)
+                       if(wifi_uart_connect_udp_client(WIFI_UART_TARGET_IP, WIFI_UART_TARGET_PORT, WIFI_UART_LOCAL_PORT,
+             - WIFI_UART_COMMAND))
+                       {
+                           printf("\r\n[wifi_uart] connect udp failed\r\n");
+                           state = 1;
+                           break;
+                       }
+               #elif (3 == WIFI_UART_AUTO_CONNECT)
+                       if(wifi_uart_entry_tcp_servers(WIFI_UART_LOCAL_PORT))
+                       {
+                           printf("\r\n[wifi_uart] build tcp server failed\r\n");
+                           state = 1;
+                           break;
+                       }
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                16/11/26  15:08:59  PAGE 17  
+
+               #endif
+ 1042   2              state = 0;
+ 1043   2          }while(0);
+ 1044   1      
+ 1045   1          wifi_uart_rx_clear();
+ 1046   1          return state;
+ 1047   1      }
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =    ------     ------
+  ecode size           =      6430     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =      1880     ------
+  xdata-const size     =    ------     ------
+  edata size           =    ------     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =       847     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

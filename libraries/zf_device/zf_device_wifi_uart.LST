@@ -1,0 +1,328 @@
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                20/10/26  22:16:09  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE zf_device_wifi_uart
+OBJECT MODULE PLACED IN C:/Users/1212/AppData/Local/Temp/wifiuart/t.obj
+COMPILER INVOKED BY: D:\Keil_v5\C251\BIN\C251.EXE C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G
+                    -144K246_100Pin_Library-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_
+                    -wifi_uart.h OBJECT(C:/Users/1212/AppData/Local/Temp/wifiuart/t.obj) 
+
+stmt  level    source
+
+    1          /********************************************************************************************************
+             -*************
+    2          * Öð·É¿Æ¼¼ WIFI ´®¿ÚÄ£¿é ¡ª¡ª STC32G ÒÆÖ²°æ
+    3          *
+    4          * Ô­Ê¼°æ±¾£ºÖð·É¿Æ¼¼ CH32V307VCT6 ¿ªÔ´¿â zf_device_wifi_uart.c/h£¨GPL3.0£©
+    5          * ÒÆÖ²Õß  £º½ö¹©²Î¿¼£¬Çë±£ÁôÖð·É¿Æ¼¼Ô­Ê¼°æÈ¨ÉùÃ÷
+    6          * ÊÊÅäÆ½Ì¨£ºSTC32G144K246 + MDK FOR C251
+    7          *
+    8          * ¸Ä¶¯ËµÃ÷£¨Ïà¶Ô CH32 Ô­°æ£©£º
+    9          *   1. ´®¿Ú¸ÄÎª UART_8 / P92(RX) / P93(TX)£¬¼´Öð·ÉÑ§Ï°Ö÷°åÉÏ¡¸ÎÞÏßÄ£¿é¡¹2*4 ÅÅ×ù
+   10          *   2. ´®¿Ú»Øµ÷Ç©Ãû¸ÄÎª void cb(uint8 dat)£¨STC32G ÓÉ DMA ÖÐ¶Ï°Ñ×Ö½Ú×÷Îª²ÎÊý´«½øÀ´£©
+   11          *   3. uart_rx_interrupt() ÐèÒªµÚÈý¸ö²ÎÊý£¨»Øµ÷º¯ÊýÖ¸Õë£©
+   12          *   4. C251 µÄ string.h Ã»ÓÐ strstr()£¬¸ÄÎªÄÚ²¿×ÔÊµÏÖ
+   13          *   5. C251 Õ»ºÜÐ¡£¬ËùÓÐ»º³å¸ÄÎª static£¬½ûÖ¹ÔÚº¯ÊýÀï¿ª´óÊý×é
+   14          *   6. É¾µô zf_log()£¨STC32G ¿âÃ»ÓÐÕâ¸ö½Ó¿Ú£©£¬¸ÄÓÃ printf
+   15          *   7. ½ÓÊÕ¸ÄÓÃ×ÔÐ´»·ÐÎ»º³å£¬²»ÔÙÒÀÀµ fifo_read_tail_buffer£¨STC32G ¿âÖÐ¸Ãº¯Êý±»×¢ÊÍµôÁË£©
+   16          *   8. Ä¬ÈÏ²¨ÌØÂÊ 1500000£¨96MHz / 4 / 16 = 1.5M£¬ÁãÎó²î£©
+   17          *********************************************************************************************************
+             -************/
+   18          /********************************************************************************************************
+             -*************
+   19          * ½ÓÏß¶¨Òå£¨Ä£¿é 2*4 ÅÅ×ù -> Ö÷°å¡¸ÎÞÏßÄ£¿é¡¹×ù£©£º
+   20          *                   Ä£¿é¹Ü½Å            µ¥Æ¬»ú¹Ü½Å
+   21          *                   RX                  P93  (UART8_TX)
+   22          *                   TX                  P92  (UART8_RX)
+   23          *                   RTS                 P94  £¨Ä¬ÈÏ²»ÓÃ£¬¼û WIFI_UART_RTS_ENABLE£©
+   24          *                   RST                 P95  £¨Ä¬ÈÏ²»ÓÃ£¬¼û WIFI_UART_HARDWARE_RST£©
+   25          *                   5V                  5V µçÔ´
+   26          *                   GND                 GND
+   27          *                   ÆäÓàÒý½ÅÐü¿Õ
+   28          *                   ------------------------------------
+   29          *********************************************************************************************************
+             -************/
+   30          #ifndef _zf_device_wifi_uart_h_
+   31          #define _zf_device_wifi_uart_h_
+   32          
+   33          #include "zf_common_typedef.h"
+*** ERROR C318 IN LINE 33 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: can't op
+             -en file 'zf_common_typedef.h'
+   34          
+   35          
+   36          /* ============================== Ó²¼þÅäÖÃÇø ============================== */
+   37          
+   38          #define WIFI_UART_INDEX         ( UART_8 )                  // Ä£¿éÊ¹ÓÃµÄ´®¿Ú
+   39          #define WIFI_UART_TX_PIN        ( UART8_TX_P93 )            // µ¥Æ¬»ú TX -> Ä£¿é RX
+   40          #define WIFI_UART_RX_PIN        ( UART8_RX_P92 )            // µ¥Æ¬»ú RX <- Ä£¿é TX
+   41          
+   42          // ²¨ÌØÂÊ£ºÏµÍ³ 96MHz£¬¹«Ê½ brt = 65536 - 96M/baud/4
+   43          //   1500000 -> 16    ÁãÎó²î£¨ÍÆ¼ö£©
+   44          //    921600 -> 26.04 Îó²î 0.16%
+   45          //    115200 -> 208.33 Îó²î 0.16%£¨Ä£¿é³ö³§Ä¬ÈÏ£¬ÏÈÓÃËüÑéÖ¤Á¬Ïß£©
+   46          #define WIFI_UART_BAUD          ( 115200 )
+   47          
+   48          #define WIFI_UART_RTS_ENABLE    ( 0 )                       // Ä£¿é RTS Òý½ÅÊÇ·ñ½Óµ½µ¥Æ¬»ú 0-Ã»½Ó 1-½ÓÁË
+   49          #if WIFI_UART_RTS_ENABLE
+               #define WIFI_UART_RTS_PIN       ( IO_P94 )                  // RTS Òý½Å£¬µÍµçÆ½±íÊ¾Ä£¿é¿ÉÒÔ¼ÌÐø½ÓÊÕ
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                20/10/26  22:16:09  PAGE 2   
+
+               #endif
+   52          
+   53          #define WIFI_UART_HARDWARE_RST  ( 0 )                       // ÊÇ·ñÊ¹ÓÃÓ²¼þ RST Òý½Å 0-Èí¼þ¸´Î» 1-Ó²¼þ¸´Î
+             -»
+   54          #if WIFI_UART_HARDWARE_RST
+               #define WIFI_UART_RST_PIN       ( IO_P95 )
+               #endif
+   57          
+   58          #define WIFI_UART_RX_SIZE       ( 1024 )                    // ½ÓÊÕ»·ÐÎ»º³å´óÐ¡£¨±ØÐëÊÇ 2 µÄÃÝ£¬Ð§ÂÊ×î¸ß£
+             -©
+   59          #define WIFI_UART_SEND_ONCE     ( 1024 )                    // µ¥Ìõ AT+CIPSEND Ò»´Î·¢ËÍµÄ×Ö½ÚÊý£¬±ð³¬¹ý 2
+             -048
+   60          
+   61          #define WIFI_UART_ACK_TIMEOUT   ( 3000 )                    // µÈ´ýµ¥Ìõ AT Ó¦´ðµÄ³¬Ê±Ê±¼ä µ¥Î» ms
+   62          #define WIFI_UART_RST_TIMEOUT   ( 6000 )                    // µÈ´ýÄ£¿éÖØÆôµÄ³¬Ê±Ê±¼ä µ¥Î» ms
+   63          
+   64          /* ============================== ÍøÂçÅäÖÃÇø ============================== */
+   65          
+   66          #define WIFI_UART_AUTO_CONNECT          ( 0 )               // 0-²»×Ô¶¯Á¬½Ó 1-×Ô¶¯Á¬ TCP ·þÎñÆ÷ 2-×Ô¶¯Á¬ 
+             -UDP 3-×Ô¶¯½¨ TCP ·þÎñÆ÷
+   67          
+   68          #if     (WIFI_UART_AUTO_CONNECT > 3)
+               #error "WIFI_UART_AUTO_CONNECT µÄÖµÖ»ÄÜÎª [0,1,2,3]"
+               #else
+   71          #define WIFI_UART_TARGET_IP     "10.222.246.19"             // µçÄÔ£¨TCP Server£©µÄ IP£¬¸Ä³É±¾»úµÄ WiFi Í
+             -ø¿¨µØÖ·
+   72          #define WIFI_UART_TARGET_PORT   "8086"                      // µçÄÔ¶Ë¿Ú£¬ºÍÖð·ÉÖúÊÖÀïÌîµÄÒ»ÖÂ
+   73          #define WIFI_UART_LOCAL_PORT    "8086"                      // Ä£¿é±¾»ú¶Ë¿Ú£¬Ò»°ã 8086 ¼´¿É
+   74          #endif
+   75          
+   76          
+   77          typedef enum
+   78          {
+   79              WIFI_UART_STATION,                                      // Éè±¸Ä£Ê½£¨Ä£¿éÈ¥Á¬ÈÈµã£©
+   80              WIFI_UART_SOFTAP,                                       // AP Ä£Ê½£¨Ä£¿é×Ô¼º·¢ÈÈµã£©
+   81          }wifi_uart_mode_enum;
+   82          
+   83          typedef enum
+   84          {
+   85              WIFI_UART_COMMAND,                                      // ÆÕÍ¨Ä£Ê½£ºÃ¿°üÊý¾ÝÇ°Òª·¢ AT+CIPSEND£¨ÎÈ¶¨£
+             -¬ÍÆ¼ö£©
+   86              WIFI_UART_SERIANET,                                     // Í¸´«Ä£Ê½£ºÁ¬ÉÏºóÖ±½Ó·¢Êý¾Ý£¨¿ì£¬µ«ÒÀÀµ RTS
+             - Á÷¿Ø£©
+   87          }wifi_uart_transfer_mode_enum;
+   88          
+   89          typedef enum
+   90          {
+   91              WIFI_UART_TCP_CLIENT,                                   // Ä£¿é×÷Îª¿Í»§¶ËÈ¥Á¬ TCP ·þÎñÆ÷
+   92              WIFI_UART_TCP_SERVER,                                   // Ä£¿é×÷Îª TCP ·þÎñÆ÷
+   93              WIFI_UART_UDP_CLIENT,                                   // Ä£¿é½¨Á¢ UDP Á¬½Ó
+   94          }wifi_uart_connect_mode_enum;
+   95          
+   96          typedef enum
+   97          {
+   98              WIFI_UART_SERVER_OFF,                                   // Î´Á¬½Ó
+   99              WIFI_UART_SERVER_ON,                                    // ÒÑÁ¬½Ó
+  100          }wifi_uart_connect_state_enum;
+  101          
+  102          typedef enum
+  103          {
+  104              WIFI_UART_LINK_0,
+  105              WIFI_UART_LINK_1,
+  106              WIFI_UART_LINK_2,
+  107              WIFI_UART_LINK_3,
+  108              WIFI_UART_LINK_4,
+  109          }wifi_uart_link_id_enum;
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                20/10/26  22:16:09  PAGE 3   
+
+  110          
+  111          typedef struct
+  112          {
+  113              uint8                           wifi_uart_version[12];          // ¹Ì¼þ°æ±¾   ×Ö·û´®
+*** ERROR C25 IN LINE 113 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: syntax e
+             -rror near 'uint8'
+*** WARNING C34 IN LINE 113 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_
+             -uart_version': missing declaration specifiers
+*** ERROR C42 IN LINE 113 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_version': not in formal parameter list
+  114              uint8                           wifi_uart_mac[20];              // ±¾»ú MAC   ×Ö·û´®
+*** WARNING C34 IN LINE 114 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8
+             -': missing declaration specifiers
+*** ERROR C42 IN LINE 114 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8':
+             - not in formal parameter list
+*** ERROR C25 IN LINE 114 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: syntax e
+             -rror near 'wifi_uart_mac'
+*** WARNING C34 IN LINE 114 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_
+             -uart_mac': missing declaration specifiers
+*** ERROR C42 IN LINE 114 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_mac': not in formal parameter list
+  115              uint8                           wifi_uart_local_ip[17];         // ±¾»ú IP    ×Ö·û´®
+*** WARNING C34 IN LINE 115 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8
+             -': missing declaration specifiers
+*** ERROR C42 IN LINE 115 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8':
+             - not in formal parameter list
+*** ERROR C25 IN LINE 115 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: syntax e
+             -rror near 'wifi_uart_local_ip'
+*** WARNING C34 IN LINE 115 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_
+             -uart_local_ip': missing declaration specifiers
+*** ERROR C42 IN LINE 115 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_local_ip': not in formal parameter list
+  116              uint8                           wifi_uart_local_port[10];       // ±¾»ú¶Ë¿Ú   ×Ö·û´®
+*** WARNING C34 IN LINE 116 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8
+             -': missing declaration specifiers
+*** ERROR C42 IN LINE 116 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8':
+             - not in formal parameter list
+*** ERROR C25 IN LINE 116 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: syntax e
+             -rror near 'wifi_uart_local_port'
+*** WARNING C34 IN LINE 116 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_
+             -uart_local_port': missing declaration specifiers
+*** ERROR C42 IN LINE 116 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_local_port': not in formal parameter list
+  117              uint8                           wifi_uart_remote_ip[5][15];     // Ô¶¶Ë IP    ×Ö·û´®
+*** WARNING C34 IN LINE 117 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8
+             -': missing declaration specifiers
+*** ERROR C42 IN LINE 117 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                20/10/26  22:16:09  PAGE 4   
+
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8':
+             - not in formal parameter list
+*** ERROR C25 IN LINE 117 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: syntax e
+             -rror near 'wifi_uart_remote_ip'
+*** WARNING C34 IN LINE 117 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_
+             -uart_remote_ip': missing declaration specifiers
+*** ERROR C42 IN LINE 117 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_remote_ip': not in formal parameter list
+  118              wifi_uart_mode_enum             wifi_uart_mode;                 // WIFI Ä£Ê½
+*** ERROR C42 IN LINE 118 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_mode': not in formal parameter list
+  119              wifi_uart_transfer_mode_enum    wifi_uart_transfer_mode;        // ´«ÊäÄ£Ê½
+*** ERROR C42 IN LINE 119 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_transfer_mode': not in formal parameter list
+  120              wifi_uart_connect_mode_enum     wifi_uart_connect_mode;         // Á¬½ÓÄ£Ê½
+*** ERROR C42 IN LINE 120 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_connect_mode': not in formal parameter list
+  121              wifi_uart_connect_state_enum    wifi_uart_connect_state;        // Á¬½Ó×´Ì¬
+*** ERROR C42 IN LINE 121 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_connect_state': not in formal parameter list
+  122          }wifi_uart_information_struct;
+*** ERROR C25 IN LINE 122 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: syntax e
+             -rror near '}'
+*** WARNING C34 IN LINE 122 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_
+             -uart_information_struct': missing declaration specifiers
+  123          
+  124          extern wifi_uart_information_struct xdata wifi_uart_information;
+*** WARNING C34 IN LINE 124 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_
+             -uart_information': missing declaration specifiers
+*** ERROR C42 IN LINE 124 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_information': not in formal parameter list
+*** WARNING C194 IN LINE 124 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Lib
+             -rary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: obsol
+             -ete declaration: use '<type> xdata wifi_uart_information'
+  125          
+  126          
+  127          uint8   wifi_uart_disconnected_wifi         (void);                                                      
+             -                   // ¶Ï¿ª WIFI Á¬½Ó
+*** WARNING C34 IN LINE 127 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8
+             -': missing declaration specifiers
+*** ERROR C42 IN LINE 127 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8':
+             - not in formal parameter list
+*** ERROR C25 IN LINE 127 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: syntax e
+             -rror near 'wifi_uart_disconnected_wifi'
+*** ERROR C42 IN LINE 127 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_disconnected_wifi': not in formal parameter list
+  128          uint8   wifi_uart_entry_serianet            (void);                                                      
+             -                   // ½øÈëÍ¸´«Ä£Ê½
+*** WARNING C34 IN LINE 128 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8
+             -': missing declaration specifiers
+C251 COMPILER V5.60.0,  zf_device_wifi_uart                                                20/10/26  22:16:09  PAGE 5   
+
+*** ERROR C42 IN LINE 128 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8':
+             - not in formal parameter list
+*** ERROR C25 IN LINE 128 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: syntax e
+             -rror near 'wifi_uart_entry_serianet'
+*** ERROR C42 IN LINE 128 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_entry_serianet': not in formal parameter list
+  129          uint8   wifi_uart_exit_serianet             (void);                                                      
+             -                   // ÍË³öÍ¸´«Ä£Ê½
+*** WARNING C34 IN LINE 129 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8
+             -': missing declaration specifiers
+*** ERROR C42 IN LINE 129 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8':
+             - not in formal parameter list
+*** ERROR C25 IN LINE 129 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: syntax e
+             -rror near 'wifi_uart_exit_serianet'
+*** ERROR C42 IN LINE 129 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_exit_serianet': not in formal parameter list
+  130          
+  131          uint8   wifi_uart_connect_tcp_servers       (char *ip, char *port, wifi_uart_transfer_mode_enum mode);   
+             -                    // Á¬½Ó TCP ·þÎñÆ÷
+*** WARNING C34 IN LINE 131 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8
+             -': missing declaration specifiers
+*** ERROR C42 IN LINE 131 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8':
+             - not in formal parameter list
+*** ERROR C25 IN LINE 131 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: syntax e
+             -rror near 'wifi_uart_connect_tcp_servers'
+*** ERROR C42 IN LINE 131 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'wifi_ua
+             -rt_connect_tcp_servers': not in formal parameter list
+  132          uint8   wifi_uart_connect_udp_client        (char *ip, char *port, char *local_port, wifi_uart_transfer_m
+             -ode_enum mode);    // ½¨Á¢ UDP Á¬½Ó
+*** WARNING C34 IN LINE 132 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Libr
+             -ary-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8
+             -': missing declaration specifiers
+*** ERROR C42 IN LINE 132 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: 'uint8':
+             - not in formal parameter list
+*** ERROR C25 IN LINE 132 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Librar
+             -y-master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: syntax e
+             -rror near 'wifi_uart_connect_udp_client'
+*** ERROR C7 IN LINE 132 OF C:/Users/1212/Downloads/STC32G144K246_100Pin_Library-master (1)/STC32G144K246_100Pin_Library
+             --master/Example/Motherboard_Demo/E09_02_mt9v03x_tft180_display_demo/libraries/zf_device/zf_device_wifi_uart.h: compilati
+             -on aborted
+
+C251 COMPILATION COMPLETE.  17 WARNING(S),  36 ERROR(S)
